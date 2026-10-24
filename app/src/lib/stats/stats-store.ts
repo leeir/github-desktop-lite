@@ -43,7 +43,7 @@ import { ValidNotificationPullRequestReviewState } from '../valid-notification-p
 import { useExternalCredentialHelperKey } from '../trampoline/use-external-credential-helper'
 import { getUserAgent } from '../http'
 import { getHooksEnvEnabled } from '../hooks/config'
-import { enableNewStatsEndpoint } from '../feature-flag'
+import { enableNewStatsEndpoint, isLite } from '../feature-flag'
 import { parseModelKey } from '../copilot/byok'
 import { DefaultCopilotModel } from '../stores/copilot-store'
 import { getSystemNotificationsPermission } from '../notifications/notification-permission'
@@ -646,6 +646,11 @@ export function buildStatsPayload(body: StatsPayload): ITelemetryPayload {
 }
 
 const defaultPostImplementation = (body: StatsPayload) => {
+  // Lite: never send usage data to GitHub.
+  if (isLite()) {
+    return Promise.resolve(new Response(null, { status: 204 }))
+  }
+
   if (enableNewStatsEndpoint()) {
     return fetch(StatsEndpoint, {
       method: 'POST',

@@ -140,3 +140,10 @@ export const enableCopilotAppHandoff = () =>
 export function enableNewStatsEndpoint(): boolean {
   return true
 }
+
+/**
+ * Is this the GitHub Desktop Lite fork? Every Lite-specific behavior change
+ * is gated on this so that diverging code paths are easy to find when
+ * rebasing onto upstream.
+ */
+export const isLite = () => true

@@ -19,7 +19,10 @@ import { parseError } from '../../lib/squirrel-error-parser'
 import { ReleaseSummary } from '../../models/release-notes'
 import { generateReleaseSummary } from '../../lib/release-notes'
 import { setNumber, getNumber } from '../../lib/local-storage'
-import { enableUpdateFromEmulatedX64ToARM64 } from '../../lib/feature-flag'
+import {
+  enableUpdateFromEmulatedX64ToARM64,
+  isLite,
+} from '../../lib/feature-flag'
 import { offsetFromNow } from '../../lib/offset-from'
 import { gte, SemVer } from 'semver'
 import { getVersion } from './app-proxy'
@@ -198,6 +201,11 @@ class UpdateStore {
    *                       attempt to retrieve the latest available deployment.
    */
   public async checkForUpdates(inBackground: boolean, skipGuidCheck: boolean) {
+    // Lite: official updates would replace this fork with upstream builds.
+    if (isLite()) {
+      return
+    }
+
     // An update has been downloaded and the app is waiting to be restarted.
     // Checking for updates again may result in the running app being nuked
     // when it finds a subsequent update on Windows, or the "Quit and Update"

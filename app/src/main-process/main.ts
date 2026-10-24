@@ -54,6 +54,7 @@ import {
 import { initializeDesktopNotifications } from './notifications'
 import parseCommandLineArgs from 'minimist'
 import { CLIAction } from '../lib/cli-action'
+import { isLite } from '../lib/feature-flag'
 
 app.setAppLogsPath()
 enableSourceMaps()
@@ -105,14 +106,18 @@ function getExtraErrorContext(): Record<string, string> {
 /** Extra argument for the protocol launcher on Windows */
 const protocolLauncherArg = '--protocol-launcher'
 
-const possibleProtocols = new Set(['x-github-client'])
+const possibleProtocols = new Set<string>(isLite() ? [] : ['x-github-client'])
 if (__DEV_SECRETS__) {
   possibleProtocols.add('x-github-desktop-dev-auth')
 } else {
-  possibleProtocols.add('x-github-desktop-auth')
+  possibleProtocols.add(
+    isLite() ? 'x-github-desktop-lite-auth' : 'x-github-desktop-auth'
+  )
 }
 // Also support Desktop Classic's protocols.
-if (__DARWIN__) {
+if (isLite()) {
+  // Lite leaves the Classic protocols to the official app.
+} else if (__DARWIN__) {
   possibleProtocols.add('github-mac')
 } else if (__WIN32__) {
   possibleProtocols.add('github-windows')

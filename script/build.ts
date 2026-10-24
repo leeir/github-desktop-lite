@@ -244,12 +244,13 @@ async function packageApp() {
     protocols: [
       {
         name: getBundleID(),
+        // Lite: only register our own OAuth callback scheme and leave
+        // x-github-client and github-mac to the official app. Must match the
+        // __DEV_SECRETS__ logic in app/app-info.ts and main-process/main.ts.
         schemes: [
-          !isDevelopmentBuild
-            ? 'x-github-desktop-auth'
-            : 'x-github-desktop-dev-auth',
-          'x-github-client',
-          'github-mac',
+          isDevelopmentBuild || !process.env.DESKTOP_OAUTH_CLIENT_SECRET
+            ? 'x-github-desktop-dev-auth'
+            : 'x-github-desktop-lite-auth',
         ],
       },
     ],
