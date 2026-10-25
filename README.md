@@ -10,12 +10,16 @@
 | --- | --- | --- |
 | 生成 commit message | 需要有 Copilot 订阅的账号，后台拉起 Copilot runtime | 填自己的 API key 即可，主进程直接请求模型 |
 | Copilot（冲突解决、额度卡片、Copilot App 跳转等） | 有 | 全部移除 |
-| 使用统计 | 上报到 GitHub | 只在本地记录，不联网 |
-| 自动更新 | 有 | 无 |
-| 安装包（macOS arm64） | 约 1.1 GB | 约 475 MB |
+| 使用统计 | 上报到 GitHub | 不收集、不保存、不上报；程序内部的非致命错误只写本地日志 |
+| 自动更新 | 有 | 无：更新检查、更新提示、版本说明弹窗、致谢卡片都已移除 |
+| 新手教程 | 有 | 移除 |
+| 内置 Git Credential Manager | 有（约 120 MB 的 .NET 程序），可在设置里启用 | 移除，「使用 Git Credential Manager」设置一并去掉 |
+| 安装包（macOS arm64） | 约 1.1 GB | 约 337 MB（其中 Electron 本体 287 MB） |
 | 和官方版并存 | — | 可以：应用名、Bundle ID（`com.leeir.GitHubDesktopLite`）、用户数据目录、钥匙串条目、OAuth 回调协议都是独立的 |
 
 其余功能（仓库管理、diff、提交、分支、PR、推拉等）与上游一致。
+
+去掉 Git Credential Manager 只影响 GitHub 以外的 HTTPS 远程（如 Azure DevOps）：这类仓库改用 Desktop 自带的账号密码提示。GitHub 账号和 SSH 不受影响；你自己在系统里装的 GCM 也照常给命令行用。
 
 ## 用自己的模型写 commit message
 
@@ -50,6 +54,10 @@
 - 不在当前选中的仓库闲置 5 分钟后，丢弃它的提交历史缓存和 diff。
 - 语法高亮 worker 从常驻 2 个改为最多 1 个，闲置 30 秒后销毁。
 - 打包时保留 dugite 里 git 的符号链接，不再展开成约 145 份 git 副本（省约 500 MB），并把链接改回包内相对路径，`codesign --verify --deep --strict` 可以通过。
+- 打包时去掉内置的 Git Credential Manager（约 120 MB），内置 git 从约 160 MB 降到 40 MB。
+- 生产构建不再生成 source map（出错时日志里的堆栈是压缩后的位置）。
+
+试过但没采用：关闭硬件加速在 macOS 上反而让内存从 184 MB 升到 209 MB（GPU 进程仍在，改成软件渲染后渲染进程还会变大），所以没有提供这个开关。
 
 内存实测（新启动，读数前强制 GC，单位 MB）：
 
@@ -59,7 +67,7 @@
 | 18 个仓库 | 193 | 179 |
 | 再打开一个大改动仓库 | 223 | 195 |
 
-测量方法和脚本见 [`lite/bench/`](lite/bench/README.md)。
+以上是新启动时的读数。长时间使用后的增长可以用 [`lite/bench/longrun.sh`](lite/bench/longrun.sh) 记录：它每小时记一次各进程内存到 CSV，可以同时跑官方版和 Lite 做对比。测量方法和脚本见 [`lite/bench/`](lite/bench/README.md)。
 
 ## 构建
 
@@ -81,7 +89,7 @@ yarn build:prod
 
 注意：
 
-- 构建不会清理 `out/`。删掉过的文件可能还留在那里，打包前请先清掉 `out/` 里的旧产物。
+- `yarn build:prod` 会先清空 `out/`，旧构建的残留文件不会被打进安装包。
 - 想用 GitHub 账号登录，需要自己注册一个 [GitHub OAuth App](https://github.com/settings/developers)，Callback URL 填 `x-github-desktop-lite-auth://oauth`，构建前设置环境变量：
 
   ```bash
