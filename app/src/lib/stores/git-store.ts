@@ -663,6 +663,21 @@ export class GitStore extends BaseStore {
     return this._localCommitSHAs
   }
 
+  /**
+   * Forget the commits loaded for the history list. Local (unpushed) commits
+   * are kept since the changes view shows the latest one; everything else is
+   * loaded again the next time the history is shown.
+   */
+  public trimCommitLookup() {
+    const keep = new Set(this._localCommitSHAs)
+    for (const sha of this.commitLookup.keys()) {
+      if (!keep.has(sha)) {
+        this.commitLookup.delete(sha)
+      }
+    }
+    this._history = []
+  }
+
   /** Store the given commits. */
   private storeCommits(commits: ReadonlyArray<Commit>) {
     for (const commit of commits) {

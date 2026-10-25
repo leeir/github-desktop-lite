@@ -28,9 +28,7 @@ export abstract class Merge extends BaseMultiCommitOperation {
     }
 
     if (
-      (state.step.kind !== MultiCommitOperationStepKind.ShowConflicts &&
-        state.step.kind !==
-          MultiCommitOperationStepKind.ShowCopilotConflicts) ||
+      state.step.kind !== MultiCommitOperationStepKind.ShowConflicts ||
       !isMergeConflictState(conflictState) ||
       operationDetail.kind !== MultiCommitOperationKind.Merge
     ) {

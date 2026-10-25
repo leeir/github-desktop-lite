@@ -1,110 +1,115 @@
-# [GitHub Desktop](https://desktop.github.com)
+# GitHub Desktop Lite
 
-[GitHub Desktop](https://desktop.github.com/) is an open-source [Electron](https://www.electronjs.org/)-based
-GitHub app. It is written in [TypeScript](https://www.typescriptlang.org) and
-uses [React](https://reactjs.org/).
+[GitHub Desktop](https://github.com/desktop/desktop) 的个人精简分支：去掉 Copilot，用自己的模型写 commit message，压低内存和安装包体积。
 
-<picture>
-  <source
-    srcset="https://user-images.githubusercontent.com/634063/202742848-63fa1488-6254-49b5-af7c-96a6b50ea8af.png"
-    media="(prefers-color-scheme: dark)"
-  />
-  <img
-    width="1072"
-    src="https://user-images.githubusercontent.com/634063/202742985-bb3b3b94-8aca-404a-8d8a-fd6a6f030672.png"
-    alt="A screenshot of the GitHub Desktop application showing changes being viewed and committed with two attributed co-authors"
-  />
-</picture>
+> 这是非官方分支，与 GitHub 无关。它从上游 `3.6.9-beta1`（`bf4ec63`）分出，**不再跟随上游更新**，也不会自动升级。
 
-## Where can I get it?
+## 和官方版有什么不同
 
-Download the official installer for your operating system:
+| | 官方版 | Lite |
+| --- | --- | --- |
+| 生成 commit message | 需要有 Copilot 订阅的账号，后台拉起 Copilot runtime | 填自己的 API key 即可，主进程直接请求模型 |
+| Copilot（冲突解决、额度卡片、Copilot App 跳转等） | 有 | 全部移除 |
+| 使用统计 | 上报到 GitHub | 只在本地记录，不联网 |
+| 自动更新 | 有 | 无 |
+| 安装包（macOS arm64） | 约 1.1 GB | 约 475 MB |
+| 和官方版并存 | — | 可以：应用名、Bundle ID（`com.leeir.GitHubDesktopLite`）、用户数据目录、钥匙串条目、OAuth 回调协议都是独立的 |
 
- - [macOS](https://central.github.com/deployments/desktop/desktop/latest/darwin)
- - [macOS (Apple silicon)](https://central.github.com/deployments/desktop/desktop/latest/darwin-arm64)
- - [Windows](https://central.github.com/deployments/desktop/desktop/latest/win32)
- - [Windows machine-wide install](https://central.github.com/deployments/desktop/desktop/latest/win32?format=msi)
+其余功能（仓库管理、diff、提交、分支、PR、推拉等）与上游一致。
 
-Linux is not officially supported; however, you can find installers created for Linux from a fork of GitHub Desktop in the [Community Releases](https://github.com/desktop/desktop#community-releases) section.
+## 用自己的模型写 commit message
 
-### Beta Channel
+打开 **设置 → AI**：
 
-Want to test out new features and get fixes before everyone else? Install the
-beta channel to get access to early builds of Desktop:
+1. 选服务商
+2. 粘贴 API key，模型列表会自动拉取
+3. 搜索并选择模型，点「测试连接」
 
- - [macOS](https://central.github.com/deployments/desktop/desktop/latest/darwin?env=beta)
- - [macOS (Apple silicon)](https://central.github.com/deployments/desktop/desktop/latest/darwin-arm64?env=beta)
- - [Windows](https://central.github.com/deployments/desktop/desktop/latest/win32?env=beta)
- - [Windows (ARM64)](https://central.github.com/deployments/desktop/desktop/latest/win32-arm64?env=beta)
+之后在提交框旁点 ✨ 就会生成标题和描述并填入。还没配置时点 ✨ 会直接跳到这一页。
 
-The release notes for the latest beta versions are available [here](https://desktop.github.com/release-notes/?env=beta).
+内置的服务商：
 
-### Past Releases
-You can find past releases at https://desktop.githubusercontent.com. After installation of a past version, the auto update functionality will attempt to download the latest version. 
+- OpenRouter、OpenAI、Anthropic、Google Gemini
+- DeepSeek、Moonshot (Kimi)、智谱 (GLM)、阿里百炼 (Qwen)、SiliconFlow
+- Ollama、LM Studio（本地）
+- 自定义（任何 OpenAI 兼容接口）
 
-### Community Releases
+说明：
 
-There are several community-supported package managers that can be used to
-install GitHub Desktop:
- - Windows users can install using [winget](https://docs.microsoft.com/en-us/windows/package-manager/winget/) `c:\> winget install github-desktop` or [Chocolatey](https://chocolatey.org/) `c:\> choco install github-desktop`
- - macOS users can install using [Homebrew](https://brew.sh/) package manager:
-      `$ brew install --cask github`
+- 只有本地服务和「自定义」需要填 Base URL。
+- API key 存在系统钥匙串里，不经过界面层。
+- 请求由主进程的 `net.fetch` 发出，跟随系统代理。
+- diff 超过 6 万字符时按文件截断。
+- 如果仓库里有 `.github/copilot-instructions.md`，它会被当作额外的写作要求一起发给模型。
+- 你的 diff 会发给你选择的服务商。在意隐私的话，请用 Ollama 或 LM Studio。
 
-Installers for various Linux distributions can be found on the
-[`shiftkey/desktop`](https://github.com/shiftkey/desktop) fork.
+代码在 [`app/src/lib/ai/`](app/src/lib/ai)，设置页在 [`app/src/ui/preferences/ai-settings.tsx`](app/src/ui/preferences/ai-settings.tsx)。
 
-## Is GitHub Desktop right for me? What are the primary areas of focus?
+## 性能改动
 
-[This document](https://github.com/desktop/desktop/blob/development/docs/process/what-is-desktop.md) describes the focus of GitHub Desktop and who the product is most useful for.
+- 不在当前选中的仓库闲置 5 分钟后，丢弃它的提交历史缓存和 diff。
+- 语法高亮 worker 从常驻 2 个改为最多 1 个，闲置 30 秒后销毁。
+- 打包时保留 dugite 里 git 的符号链接，不再展开成约 145 份 git 副本（省约 500 MB），并把链接改回包内相对路径，`codesign --verify --deep --strict` 可以通过。
 
-## I have a problem with GitHub Desktop
+内存实测（新启动，读数前强制 GC，单位 MB）：
 
-Note: The [GitHub Desktop Code of Conduct](https://github.com/desktop/desktop/blob/development/CODE_OF_CONDUCT.md) applies in all interactions relating to the GitHub Desktop project.
+| 场景 | 改造前 | 现在 |
+| --- | --- | --- |
+| 无仓库 | 137 | 136 |
+| 18 个仓库 | 193 | 179 |
+| 再打开一个大改动仓库 | 223 | 195 |
 
-First, please search the [open issues](https://github.com/desktop/desktop/issues?q=is%3Aopen)
-and [closed issues](https://github.com/desktop/desktop/issues?q=is%3Aclosed)
-to see if your issue hasn't already been reported (it may also be fixed).
+测量方法和脚本见 [`lite/bench/`](lite/bench/README.md)。
 
-There is also a list of [known issues](https://github.com/desktop/desktop/blob/development/docs/known-issues.md)
-that are being tracked against Desktop, and some of these issues have workarounds.
+## 构建
 
-If you can't find an issue that matches what you're seeing, open a [new issue](https://github.com/desktop/desktop/issues/new/choose),
-choose the right template and provide us with enough information to investigate
-further.
+需要 macOS，Node `24.22.1`（见 `.nvmrc`）和 Yarn。
 
-## The issue I reported isn't fixed yet. What can I do?
+```bash
+nvm use
+```
 
-If nobody has responded to your issue in a few days, you're welcome to respond to it with a friendly ping in the issue. Please do not respond more than a second time if nobody has responded. The GitHub Desktop maintainers are constrained in time and resources, and diagnosing individual configurations can be difficult and time consuming. While we'll try to at least get you pointed in the right direction, we can't guarantee we'll be able to dig too deeply into any one person's issue.
+```bash
+yarn
+```
 
-## How can I contribute to GitHub Desktop?
+```bash
+yarn build:prod
+```
 
-The [CONTRIBUTING.md](./.github/CONTRIBUTING.md) document will help you get setup and
-familiar with the source. The [documentation](docs/) folder also contains more
-resources relevant to the project.
+产物在 `dist/GitHub Desktop Lite-darwin-arm64/`。没有签名，第一次打开时右键选「打开」。
 
-If you're looking for something to work on, check out the [help wanted](https://github.com/desktop/desktop/issues?q=is%3Aissue+is%3Aopen+label%3A%22help%20wanted%22) label.
+注意：
 
-## Building Desktop
+- 构建不会清理 `out/`。删掉过的文件可能还留在那里，打包前请先清掉 `out/` 里的旧产物。
+- 想用 GitHub 账号登录，需要自己注册一个 [GitHub OAuth App](https://github.com/settings/developers)，Callback URL 填 `x-github-desktop-lite-auth://oauth`，构建前设置环境变量：
 
-To setup your development environment for building Desktop, check out: [`setup.md`](./docs/contributing/setup.md).
+  ```bash
+  export DESKTOP_OAUTH_CLIENT_ID=<client id> DESKTOP_OAUTH_CLIENT_SECRET=<client secret>
+  ```
 
-## More Resources
+  不设置时会用上游的开发用 OAuth App，回调协议是 `x-github-desktop-dev-auth`。
 
-See [desktop.github.com](https://desktop.github.com) for more product-oriented
-information about GitHub Desktop.
+开发模式运行：
 
-See our [getting started documentation](https://docs.github.com/en/desktop/overview/getting-started-with-github-desktop) for more information on how to set up, authenticate, and configure GitHub Desktop.
+```bash
+yarn build:dev && yarn start
+```
 
-## License
+测试和检查：
 
-**[MIT](LICENSE)**
+```bash
+yarn test
+```
 
-The MIT license grant is not for GitHub's trademarks, which include the logo
-designs. GitHub reserves all trademark and copyright rights in and to all
-GitHub trademarks. GitHub's logos include, for instance, the stylized
-Invertocat designs that include "logo" in the file title in the following
-folder: [logos](app/static/logos).
+```bash
+yarn lint
+```
 
-GitHub® and its stylized versions and the Invertocat mark are GitHub's
-Trademarks or registered Trademarks. When using GitHub's logos, be sure to
-follow the GitHub [logo guidelines](https://github.com/logos).
+更多开发环境细节见上游的 [`docs/contributing/setup.md`](docs/contributing/setup.md)。
+
+## 许可证
+
+**[MIT](LICENSE)**，沿用上游。
+
+MIT 许可不包含 GitHub 的商标，包括 [`app/static/logos`](app/static/logos) 里的 Invertocat 等标志。GitHub® 及其标志是 GitHub 的商标或注册商标，使用时请遵守 [GitHub 标志使用规范](https://github.com/logos)。

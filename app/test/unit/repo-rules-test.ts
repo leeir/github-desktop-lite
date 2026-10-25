@@ -12,7 +12,7 @@ import {
   RepoRulesMetadataStatus,
 } from '../../src/models/repo-rules'
 import { Repository } from '../../src/models/repository'
-import { getEnforcedRuleDescriptions } from '../../src/lib/stores/copilot-store'
+import { getEnforcedRuleDescriptions } from '../../src/lib/ai/commit-prompt'
 
 const creationRule: IAPIRepoRule = {
   ruleset_id: 1,

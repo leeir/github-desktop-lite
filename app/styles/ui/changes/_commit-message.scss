@@ -65,21 +65,6 @@
     }
   }
 
-  .copilot-disclaimer-popover-header {
-    display: flex;
-
-    h3 {
-      margin-bottom: 0;
-      font-size: var(--font-size);
-    }
-
-    @include close-button;
-
-    .close {
-      margin-right: 0;
-    }
-  }
-
   .summary {
     position: relative;
     display: flex;
@@ -150,7 +135,7 @@
     }
   }
 
-  .copilot-button {
+  .ai-button {
     color: var(--text-secondary-color);
 
     &:not([aria-disabled='true']):hover {
@@ -282,7 +267,7 @@
     }
 
     .co-authors-toggle,
-    .copilot-button,
+    .ai-button,
     .commit-options-button {
       // button reset styles
       border: none;

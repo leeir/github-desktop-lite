@@ -1,7 +1,5 @@
 import { getDotComAPIEndpoint, getHTMLURL, IAPIEmail } from '../lib/api'
 
-export const CopilotLicenseTypeNoAccess = 'NO_ACCESS'
-
 /**
  * Returns a value indicating whether two account instances
  * can be considered equal. Equality is determined by comparing
@@ -38,10 +36,7 @@ export class Account {
    * @param id The GitHub.com or GitHub Enterprise database id for this account.
    * @param name The friendly name associated with this account
    * @param plan The plan associated with this account
-   * @param copilotEndpoint The endpoint for the Copilot API
-   * @param isCopilotDesktopEnabled Whether Copilot for Desktop is enabled for this account
    * @param features The Desktop-specific features available to this account
-   * @param copilotLicenseType The user's Copilot license type
    */
   public constructor(
     public readonly login: string,
@@ -52,10 +47,7 @@ export class Account {
     public readonly id: number,
     public readonly name: string,
     public readonly plan?: string,
-    public readonly copilotEndpoint?: string,
-    public readonly isCopilotDesktopEnabled?: boolean,
-    public readonly features?: ReadonlyArray<string>,
-    public readonly copilotLicenseType?: string
+    public readonly features?: ReadonlyArray<string>
   ) {}
 
   public withToken(token: string): Account {
@@ -68,10 +60,7 @@ export class Account {
       this.id,
       this.name,
       this.plan,
-      this.copilotEndpoint,
-      this.isCopilotDesktopEnabled,
-      this.features,
-      this.copilotLicenseType
+      this.features
     )
   }
 

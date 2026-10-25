@@ -142,7 +142,6 @@ describe('OAuth credential persistence', () => {
       name: 'Updated Name',
     }))
     t.mock.method(API.prototype, 'fetchEmails', async () => [])
-    t.mock.method(API.prototype, 'fetchUserCopilotInfo', async () => null)
     t.mock.method(API.prototype, 'fetchFeatureFlags', async () => [])
 
     await store.refresh()

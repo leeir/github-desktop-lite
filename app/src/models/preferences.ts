@@ -1,7 +1,7 @@
 export enum PreferencesTab {
   Accounts,
   Integrations,
-  Copilot,
+  AI,
   Git,
   Appearance,
   Notifications,

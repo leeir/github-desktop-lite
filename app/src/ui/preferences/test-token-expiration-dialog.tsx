@@ -183,9 +183,8 @@ export class TestTokenExpirationDialog extends React.Component<
                 ))}
               </Row>
               <p>
-                Ordinary requests refresh within 10 minutes of expiry. Copilot
-                session creation refreshes within 61 minutes and 1 second.
-                Renewal happens when authenticated work next requests a token.
+                Requests refresh within 10 minutes of expiry. Renewal happens
+                when authenticated work next requests a token.
               </p>
               <Row>
                 <Button

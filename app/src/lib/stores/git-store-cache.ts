@@ -23,6 +23,11 @@ export class GitStoreCache {
     }
   }
 
+  /** The repository's GitStore, if one has been created. */
+  public peek(repository: Repository): GitStore | undefined {
+    return this.gitStores.get(repository.hash)
+  }
+
   public get(repository: Repository): GitStore {
     let gitStore = this.gitStores.get(repository.hash)
     if (gitStore === undefined) {

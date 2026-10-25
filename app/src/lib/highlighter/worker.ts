@@ -2,8 +2,45 @@ import { ITokens, IHighlightRequest } from './types'
 import { encodePathAsUrl } from '../../lib/path'
 
 const highlightWorkers = new Array<Worker>()
-const maxIdlingWorkers = 2
+const maxIdlingWorkers = 1
 const workerMaxRunDuration = 5 * 1000
+/**
+ * Each worker loads its own copy of the CodeMirror modes, so don't keep idle
+ * ones around once the user has stopped looking at diffs.
+ */
+const workerMaxIdleDuration = 30 * 1000
+const idleTimeouts = new Map<Worker, number>()
+
+function releaseWorker(worker: Worker) {
+  if (highlightWorkers.length >= maxIdlingWorkers) {
+    worker.terminate()
+    return
+  }
+
+  highlightWorkers.push(worker)
+  idleTimeouts.set(
+    worker,
+    window.setTimeout(() => {
+      idleTimeouts.delete(worker)
+      const index = highlightWorkers.indexOf(worker)
+      if (index !== -1) {
+        highlightWorkers.splice(index, 1)
+        worker.terminate()
+      }
+    }, workerMaxIdleDuration)
+  )
+}
+
+function acquireWorker(): Worker {
+  const worker = highlightWorkers.shift()
+  if (worker === undefined) {
+    return new Worker(workerUri)
+  }
+
+  window.clearTimeout(idleTimeouts.get(worker))
+  idleTimeouts.delete(worker)
+  return worker
+}
 const workerUri = encodePathAsUrl(__dirname, 'highlighter.js')
 
 /**
@@ -41,7 +78,7 @@ export function highlight(
   }
 
   // Get an idle worker or create a new one if none exist.
-  const worker = highlightWorkers.shift() || new Worker(workerUri)
+  const worker = acquireWorker()
 
   return new Promise<ITokens>((resolve, reject) => {
     let timeout: null | number = null
@@ -61,11 +98,7 @@ export function highlight(
 
     worker.onmessage = ev => {
       clearTimeout()
-      if (highlightWorkers.length < maxIdlingWorkers) {
-        highlightWorkers.push(worker)
-      } else {
-        worker.terminate()
-      }
+      releaseWorker(worker)
       resolve(ev.data as ITokens)
     }
 

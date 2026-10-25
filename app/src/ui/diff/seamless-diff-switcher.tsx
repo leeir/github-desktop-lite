@@ -60,9 +60,8 @@ interface ISeamlessDiffSwitcherProps {
    * When this prop is defined (including `null`), the switcher treats it as the
    * authoritative source for syntax highlighting and context expansion and does
    * *not* fetch file contents from git. This is required for synthetic diffs
-   * whose sides don't correspond to an addressable git revision (e.g. the
-   * Copilot conflict resolution diffs, where the base is the on-disk conflicted
-   * file and the target is arbitrary resolved content). A value of `null` means
+   * whose sides don't correspond to an addressable git revision. A value of
+   * `null` means
    * the contents aren't ready yet and the diff should keep showing as loading.
    *
    * When left `undefined` the switcher loads contents from git as usual.
