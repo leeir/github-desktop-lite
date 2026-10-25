@@ -18,7 +18,6 @@ import * as octicons from '../octicons/octicons.generated'
 import { RelativeTime } from '../relative-time'
 
 import { ToolbarButton, ToolbarButtonStyle } from './button'
-import classNames from 'classnames'
 import {
   DropdownState,
   IToolbarDropdownProps,
@@ -74,9 +73,6 @@ interface IPushPullButtonProps {
 
   /** Force push state of the current branch */
   readonly forcePushBranchState: ForcePushBranchState
-
-  /** Whether this component should show its onboarding tutorial nudge arrow */
-  readonly shouldNudge: boolean
 
   /**
    * The number of tags that would get pushed if the user performed a push.
@@ -465,11 +461,7 @@ export class PushPullButton extends React.Component<
 
     if (aheadBehind === null) {
       const isGitHubRepository = repository.gitHubRepository !== null
-      return this.publishBranchButton(
-        isGitHubRepository,
-        this.push,
-        this.props.shouldNudge
-      )
+      return this.publishBranchButton(isGitHubRepository, this.push)
     }
 
     const { ahead, behind } = aheadBehind
@@ -554,22 +546,12 @@ export class PushPullButton extends React.Component<
     )
   }
 
-  private publishBranchButton(
-    isGitHub: boolean,
-    onClick: () => void,
-    shouldNudge: boolean
-  ) {
+  private publishBranchButton(isGitHub: boolean, onClick: () => void) {
     const description = isGitHub
       ? 'Publish this branch to GitHub'
       : 'Publish this branch to the remote'
 
-    const className = classNames(
-      this.defaultDropdownProps().className,
-      'nudge-arrow',
-      {
-        'nudge-arrow-up': shouldNudge,
-      }
-    )
+    const className = this.defaultDropdownProps().className
 
     return (
       <ToolbarDropdown

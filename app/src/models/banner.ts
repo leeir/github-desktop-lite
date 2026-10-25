@@ -1,4 +1,3 @@
-import { Emoji } from '../lib/emoji'
 import { Popup } from './popup'
 
 export enum BannerType {
@@ -12,7 +11,6 @@ export enum BannerType {
   CherryPickUndone = 'CherryPickUndone',
   SquashUndone = 'SquashUndone',
   ReorderUndone = 'ReorderUndone',
-  OpenThankYouCard = 'OpenThankYouCard',
   SuccessfulSquash = 'SuccessfulSquash',
   SuccessfulReorder = 'SuccessfulReorder',
   ConflictsFound = 'ConflictsFound',
@@ -77,12 +75,6 @@ export type Banner =
       readonly targetBranchName: string
       /** number of commits cherry picked */
       readonly countCherryPicked: number
-    }
-  | {
-      readonly type: BannerType.OpenThankYouCard
-      readonly emoji: Map<string, Emoji>
-      readonly onOpenCard: () => void
-      readonly onThrowCardAway: () => void
     }
   | {
       readonly type: BannerType.SuccessfulSquash

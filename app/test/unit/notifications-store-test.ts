@@ -22,12 +22,7 @@ describe('NotificationsStore', async () => {
     createTestPullRequestStore,
   } = await import('../helpers/app-store-test-harness')
   const { StatsStore } = await import('../../src/lib/stats')
-  const { TestStatsDatabase } = await import('../helpers/databases')
-  const { TestActivityMonitor } = await import(
-    '../helpers/test-activity-monitor'
-  )
   const { TestStatsStore } = await import('../helpers/test-stats-store')
-  const { fakePost } = await import('../fake-stats-post')
   const { setupEmptyRepository } = await import('../helpers/repositories')
   const { makeCommit } = await import('../helpers/repository-scaffolding')
   const { getTipOrError } = await import('../helpers/git')
@@ -105,9 +100,7 @@ describe('NotificationsStore', async () => {
       repositories
     )
     t.mock.method(coordinator, 'getAllPullRequests', async () => [pullRequest])
-    const statsDb = new TestStatsDatabase()
-    t.after(() => statsDb.close())
-    const stats = new StatsStore(statsDb, new TestActivityMonitor(), fakePost)
+    const stats = new StatsStore()
     const metrics = new TestStatsStore()
     t.mock.method(stats, 'increment', metrics.increment)
     const store = new NotificationsStore(accounts, alive, coordinator, stats)
@@ -219,10 +212,13 @@ describe('NotificationsStore', async () => {
 
         await harness.onAliveEvent(event)
 
-        assert.deepStrictEqual(harness.metrics.metrics, {
-          [testCase.count]: 1,
-          ...(shown ? { [testCase.shown]: 1 } : {}),
-        })
+        // Lite only counts failed checks; review notifications aren't tracked.
+        if (testCase.event.type === 'pr-checks-failed') {
+          assert.deepStrictEqual(harness.metrics.metrics, {
+            [testCase.count]: 1,
+            ...(shown ? { [testCase.shown]: 1 } : {}),
+          })
+        }
         assert.strictEqual(show.mock.callCount(), 1)
       })
     }
@@ -236,9 +232,11 @@ describe('NotificationsStore', async () => {
           ? { ...testCase.event, commit_sha: commitSHA }
           : testCase.event
       await store.onNotificationEventReceived('click', 'id', event)
-      assert.deepStrictEqual(metrics.metrics, {
-        [testCase.count.replace(/Count$/, 'Clicked')]: 1,
-      })
+      if (testCase.event.type === 'pr-checks-failed') {
+        assert.deepStrictEqual(metrics.metrics, {
+          [testCase.count.replace(/Count$/, 'Clicked')]: 1,
+        })
+      }
       assert.strictEqual(show.mock.callCount(), 0)
     })
   }

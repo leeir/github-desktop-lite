@@ -1,21 +1,13 @@
 import { AccountsStore } from '../stores'
 import { TrampolineCommandHandler } from './trampoline-command'
 import { forceUnwrap } from '../fatal-error'
-import {
-  approveCredential,
-  fillCredential,
-  formatCredential,
-  parseCredential,
-  rejectCredential,
-} from '../git/credential'
+import { formatCredential, parseCredential } from '../git/credential'
 import {
   getCredentialUrl,
   getIsBackgroundTaskEnvironment,
-  getTrampolineEnvironmentPath,
   holdCredentialLease,
   setHasRejectedCredentialsForEndpoint,
 } from './trampoline-environment'
-import { useExternalCredentialHelper } from './use-external-credential-helper'
 import {
   findGenericTrampolineAccount,
   findGitHubTrampolineAccount,
@@ -100,15 +92,6 @@ async function getGenericCredential(cred: Credential, token: string) {
   }
 }
 
-async function getExternalCredential(input: Credential, token: string) {
-  const path = getTrampolineEnvironmentPath(token)
-  const cred = await fillCredential(input, path, getGcmEnv(token))
-  if (cred) {
-    info(`found credential for ${getCredentialUrl(cred)} in external helper`)
-  }
-  return cred
-}
-
 /** Implementation of the 'get' git credential helper command */
 async function getCredential(cred: Credential, store: Store, token: string) {
   const ghCred = await getGitHubCredential(cred, store, token)
@@ -148,9 +131,7 @@ async function getCredential(cred: Credential, store: Store, token: string) {
     return undefined
   }
 
-  return useExternalCredentialHelper()
-    ? getExternalCredential(cred, token)
-    : getGenericCredential(cred, token)
+  return getGenericCredential(cred, token)
 }
 
 const getEndpointKind = async (cred: Credential, store: Store) => {
@@ -203,18 +184,11 @@ async function storeCredential(cred: Credential, store: Store, token: string) {
     return
   }
 
-  return useExternalCredentialHelper()
-    ? storeExternalCredential(cred, token)
-    : setGenericCredential(
-        urlWithoutCredentials(getCredentialUrl(cred)),
-        forceUnwrap(`credential missing username`, cred.get('username')),
-        forceUnwrap(`credential missing password`, cred.get('password'))
-      )
-}
-
-const storeExternalCredential = (cred: Credential, token: string) => {
-  const path = getTrampolineEnvironmentPath(token)
-  return approveCredential(cred, path, getGcmEnv(token))
+  return setGenericCredential(
+    urlWithoutCredentials(getCredentialUrl(cred)),
+    forceUnwrap(`credential missing username`, cred.get('username')),
+    forceUnwrap(`credential missing password`, cred.get('password'))
+  )
 }
 
 /** Implementation of the 'erase' git credential helper command */
@@ -223,17 +197,10 @@ async function eraseCredential(cred: Credential, store: Store, token: string) {
     return
   }
 
-  return useExternalCredentialHelper()
-    ? eraseExternalCredential(cred, token)
-    : deleteGenericCredential(
-        urlWithoutCredentials(getCredentialUrl(cred)),
-        forceUnwrap(`credential missing username`, cred.get('username'))
-      )
-}
-
-const eraseExternalCredential = (cred: Credential, token: string) => {
-  const path = getTrampolineEnvironmentPath(token)
-  return rejectCredential(cred, path, getGcmEnv(token))
+  return deleteGenericCredential(
+    urlWithoutCredentials(getCredentialUrl(cred)),
+    forceUnwrap(`credential missing username`, cred.get('username'))
+  )
 }
 
 export const createCredentialHelperTrampolineHandler: (
@@ -274,15 +241,5 @@ export const createCredentialHelperTrampolineHandler: (
   } catch (e) {
     error(`${firstParameter} failed`, e)
     return undefined
-  }
-}
-
-function getGcmEnv(token: string): Record<string, string | undefined> {
-  const isBackgroundTask = getIsBackgroundTaskEnvironment(token)
-  return {
-    ...(process.env.GITHUB_DESKTOP_DISABLE_HARDWARE_ACCELERATION
-      ? { GCM_GUI_SOFTWARE_RENDERING: '1' }
-      : {}),
-    GCM_INTERACTIVE: isBackgroundTask ? '0' : '1',
   }
 }

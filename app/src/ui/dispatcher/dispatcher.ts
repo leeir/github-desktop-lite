@@ -49,13 +49,9 @@ import {
   urlsMatch,
 } from '../../lib/repository-matching'
 import { Shell } from '../../lib/shells'
-import { ILaunchStats, StatsStore } from '../../lib/stats'
+import { StatsStore } from '../../lib/stats'
 import { AppStore } from '../../lib/stores/app-store'
-import type {
-  CopilotFeature,
-  CopilotModelSelectionsByAccount,
-} from '../../lib/stores/copilot-store'
-import type { IBYOKProvider } from '../../lib/copilot/byok'
+import type { IAISettings } from '../../lib/ai/providers'
 import { RepositoryStateCache } from '../../lib/stores/repository-state-cache'
 import { getTipSha } from '../../lib/tip'
 
@@ -113,7 +109,6 @@ import { resolveWithin } from '../../lib/path'
 import { CherryPickResult } from '../../lib/git/cherry-pick'
 import { sleep } from '../../lib/promise'
 import { DragElement, DragType } from '../../models/drag-drop'
-import { ILastThankYou } from '../../models/last-thank-you'
 import { dragAndDropManager } from '../../lib/drag-and-drop-manager'
 import {
   CreateBranchStep,
@@ -132,11 +127,6 @@ import { ICustomIntegration } from '../../lib/custom-integration'
 import { isAbsolute } from 'path'
 import { CLIAction } from '../../lib/cli-action'
 import { BypassReasonType } from '../secret-scanning/bypass-push-protection-dialog'
-import {
-  IConflictResolutionProgress,
-  IFileResolution,
-  ICopilotResolutionSummary,
-} from '../../lib/copilot-conflict-resolution'
 import {
   IDeferredCheckout,
   IDeleteWorktreeOptions,
@@ -184,35 +174,6 @@ export class Dispatcher {
     paths: ReadonlyArray<string>
   ): Promise<ReadonlyArray<Repository>> {
     return this.appStore._addRepositories(paths)
-  }
-
-  /**
-   * Add a tutorial repository.
-   *
-   * This method differs from the `addRepositories` method in that it
-   * requires that the repository has been created on the remote and
-   * set up to track it. Given that tutorial repositories are created
-   * from the no-repositories blank slate it shouldn't be possible for
-   * another repository with the same path to exist but in case that
-   * changes in the future this method will set the tutorial flag on
-   * the existing repository at the given path.
-   */
-  public addTutorialRepository(
-    path: string,
-    endpoint: string,
-    apiRepository: IAPIFullRepository
-  ) {
-    return this.appStore._addTutorialRepository(path, endpoint, apiRepository)
-  }
-
-  /** Resume an already started onboarding tutorial */
-  public resumeTutorial(repository: Repository) {
-    return this.appStore._resumeTutorial(repository)
-  }
-
-  /** Suspend the onboarding tutorial and go to the no repositories blank slate view */
-  public pauseTutorial(repository: Repository) {
-    return this.appStore._pauseTutorial(repository)
   }
 
   /**
@@ -1097,20 +1058,6 @@ export class Dispatcher {
   }
 
   /**
-   * Set the update banner's visibility
-   */
-  public setUpdateBannerVisibility(isVisible: boolean) {
-    return this.appStore._setUpdateBannerVisibility(isVisible)
-  }
-
-  /**
-   * Set the update show case visibility
-   */
-  public setUpdateShowCaseVisibility(isVisible: boolean) {
-    return this.appStore._setUpdateShowCaseVisibility(isVisible)
-  }
-
-  /**
    * Set the banner state for the application
    */
   public setBanner(state: Banner) {
@@ -1189,10 +1136,6 @@ export class Dispatcher {
     )
   }
 
-  public updateCommitMessageGenerationDisclaimerLastSeen() {
-    return this.appStore._updateCommitMessageGenerationDisclaimerLastSeen()
-  }
-
   public generateCommitMessage(
     repository: Repository,
     filesSelected: ReadonlyArray<WorkingDirectoryFileChange>
@@ -1205,59 +1148,11 @@ export class Dispatcher {
   }
 
   /**
-   * Use Copilot to analyze and suggest resolutions for conflicts
-   * from merge, rebase, or cherry-pick operations.
+   * Save the AI provider and model used for commit messages. Pass `apiKey`
+   * to store (or, when empty, remove) the provider's key in the keychain.
    */
-  public resolveConflictsWithCopilot(
-    repository: Repository,
-    onProgress?: (progress: IConflictResolutionProgress) => void
-  ): Promise<{
-    readonly resolutions: ReadonlyArray<IFileResolution>
-    readonly summary: ICopilotResolutionSummary
-  } | null> {
-    return this.appStore._resolveConflictsWithCopilot(repository, onProgress)
-  }
-
-  /**
-   * Start the full Copilot conflict resolution flow: call the API and
-   * transition to the result dialog.
-   */
-  public startCopilotConflictResolution(repository: Repository): Promise<void> {
-    return this.appStore._startCopilotConflictResolution(repository)
-  }
-
-  /**
-   * Cancel the in-flight Copilot conflict resolution, tearing down the
-   * underlying SDK turn immediately rather than letting it run to completion.
-   */
-  public abortCopilotConflictResolution(repository: Repository): void {
-    return this.appStore._abortCopilotConflictResolution(repository)
-  }
-
-  /**
-   * User-facing entry point invoked from the manual conflicts dialog's
-   * "Resolve with Copilot" button. Handles account-availability check,
-   * first-click tracking, and the AI-tool disclaimer popup before
-   * transitioning to the loading interstitial.
-   */
-  public attemptCopilotConflictResolution(
-    repository: Repository
-  ): Promise<void> {
-    return this.appStore._attemptCopilotConflictResolution(repository)
-  }
-
-  public updateCopilotConflictResolutionDisclaimerLastSeen() {
-    return this.appStore._updateCopilotConflictResolutionDisclaimerLastSeen()
-  }
-
-  /**
-   * Write Copilot-resolved file contents to disk and stage them.
-   * Called when the user confirms the resolutions from the result dialog.
-   */
-  public applyCopilotConflictResolutions(
-    repository: Repository
-  ): Promise<void> {
-    return this.appStore._applyCopilotConflictResolutions(repository)
+  public setAISettings(settings: IAISettings | null, apiKey?: string) {
+    return this.appStore._setAISettings(settings, apiKey)
   }
 
   /** Remove the given account from the app. */
@@ -1569,21 +1464,6 @@ export class Dispatcher {
     }
   }
 
-  /** Record the given launch stats. */
-  public recordLaunchStats(stats: ILaunchStats): Promise<void> {
-    return this.appStore._recordLaunchStats(stats)
-  }
-
-  /** Report any stats if needed. */
-  public reportStats(): Promise<void> {
-    return this.appStore._reportStats()
-  }
-
-  /** Send the current stats without affecting the daily reporting schedule. */
-  public sendStats(): Promise<boolean> {
-    return this.appStore._sendStats()
-  }
-
   /** Changes the URL for the remote that matches the given name  */
   public setRemoteURL(
     repository: Repository,
@@ -1641,22 +1521,6 @@ export class Dispatcher {
     return this.appStore._openInExternalEditor(fullPath)
   }
 
-  /** Open the selected checkout in the GitHub Copilot app. */
-  public async openInCopilotApp(repositoryPath: string): Promise<void> {
-    this.statsStore.increment('openInCopilotAppCount')
-
-    try {
-      await this.appStore._openInCopilotApp(repositoryPath)
-    } catch (error) {
-      await this.postError(error)
-    }
-  }
-
-  /** Set the configured GitHub Copilot app path used for repository handoff. */
-  public setCopilotAppPath(path: string | null): Promise<void> {
-    return this.appStore._setCopilotAppPath(path)
-  }
-
   /**
    * Opens a path in a selected external editor without changing preferences.
    */
@@ -1680,20 +1544,6 @@ export class Dispatcher {
    */
   public saveGitIgnore(repository: Repository, text: string): Promise<void> {
     return this.appStore._saveGitIgnore(repository, text)
-  }
-
-  /** Set whether the user has opted out of stats reporting. */
-  public setStatsOptOut(
-    optOut: boolean,
-    userViewedPrompt: boolean
-  ): Promise<void> {
-    return this.appStore.setStatsOptOut(optOut, userViewedPrompt)
-  }
-
-  public setUseExternalCredentialHelper(useExternalCredentialHelper: boolean) {
-    return this.appStore._setUseExternalCredentialHelper(
-      useExternalCredentialHelper
-    )
   }
 
   /** Moves the app to the /Applications folder on macOS. */
@@ -2895,35 +2745,6 @@ export class Dispatcher {
     return this.appStore._hideStashedChanges(repository)
   }
 
-  /** Call when the user opts to skip the pick editor step of the onboarding tutorial */
-  public skipPickEditorTutorialStep(repository: Repository) {
-    return this.appStore._skipPickEditorTutorialStep(repository)
-  }
-
-  /**
-   * Call when the user has either created a pull request or opts to
-   * skip the create pull request step of the onboarding tutorial
-   */
-  public markPullRequestTutorialStepAsComplete(repository: Repository) {
-    return this.appStore._markPullRequestTutorialStepAsComplete(repository)
-  }
-
-  public markTutorialCompletionAsAnnounced(repository: Repository) {
-    return this.appStore._markTutorialCompletionAsAnnounced(repository)
-  }
-
-  /**
-   * Create a tutorial repository using the given account. The account
-   * determines which host (i.e. GitHub.com or a GHES instance) that
-   * the tutorial repository should be created on.
-   *
-   * @param account The account (and thereby the GitHub host) under
-   *                which the repository is to be created created
-   */
-  public createTutorialRepository(account: Account) {
-    return this.appStore._createTutorialRepository(account)
-  }
-
   /** Open the issue creation page for a GitHub repository in a browser */
   public async openIssueCreationPage(repository: Repository): Promise<boolean> {
     // Default to creating issue on parent repo
@@ -3448,11 +3269,6 @@ export class Dispatcher {
     return this.appStore._getBranchAheadBehind(repository, branch)
   }
 
-  /** Set whether thank you is in order for external contributions */
-  public setLastThankYou(lastThankYou: ILastThankYou) {
-    this.appStore._setLastThankYou(lastThankYou)
-  }
-
   /** Set whether or not the user wants to use a custom external editor */
   public setUseCustomEditor(useCustomEditor: boolean) {
     this.appStore._setUseCustomEditor(useCustomEditor)
@@ -3956,22 +3772,6 @@ export class Dispatcher {
     return this.appStore._setMultiCommitOperationStep(repository, step)
   }
 
-  /**
-   * Atomically transition the multi commit operation step and set the
-   * useCopilotConflictResolution flag in a single store update.
-   */
-  public setMultiCommitOperationStepWithCopilotResolution(
-    repository: Repository,
-    step: MultiCommitOperationStep,
-    useCopilotConflictResolution: boolean
-  ): void {
-    this.appStore._setMultiCommitOperationStepWithCopilotResolution(
-      repository,
-      step,
-      useCopilotConflictResolution
-    )
-  }
-
   /** Method to clear multi commit operation state. */
   public endMultiCommitOperation(repository: Repository) {
     this.appStore._endMultiCommitOperation(repository)
@@ -4163,16 +3963,6 @@ export class Dispatcher {
   }
 
   /**
-   * Attempts to quit the app if it's not updating, unless requested to quit
-   * even if it is updating.
-   *
-   * @param evenIfUpdating Whether to quit even if the app is updating.
-   */
-  public quitApp(evenIfUpdating: boolean) {
-    this.appStore._quitApp(evenIfUpdating)
-  }
-
-  /**
    * Cancels quitting the app. This could be needed if, on macOS, the user tries
    * to quit the app while an update is in progress, but then after being
    * informed about the issues that could cause they decided to not close the
@@ -4301,77 +4091,5 @@ export class Dispatcher {
 
   public toggleChangesFilterVisibility() {
     this.appStore._toggleChangesFilterVisibility()
-  }
-
-  /** Set the selected Copilot model for a specific feature. */
-  public setSelectedCopilotModel(
-    account: Account,
-    feature: CopilotFeature,
-    model: string | null
-  ) {
-    return this.appStore._setSelectedCopilotModel(account, feature, model)
-  }
-
-  /** Replace all account-scoped Copilot model selections at once. */
-  public setSelectedCopilotModelsByAccount(
-    modelsByAccount: CopilotModelSelectionsByAccount
-  ) {
-    return this.appStore._setSelectedCopilotModelsByAccount(modelsByAccount)
-  }
-
-  public setAlwaysUseCopilotForConflictResolution(value: boolean): void {
-    this.appStore._setAlwaysUseCopilotForConflictResolution(value)
-  }
-
-  /** Fetch the list of available Copilot models from the SDK. */
-  public fetchCopilotModels(): Promise<void> {
-    return this.appStore._fetchCopilotModels()
-  }
-
-  /** Fetch Copilot quota usage snapshots from the SDK. */
-  public fetchCopilotQuotaSnapshots(): Promise<void> {
-    return this.appStore._fetchCopilotQuotaSnapshots()
-  }
-
-  /**
-   * Add a new BYOK Copilot provider. The secret (API key / bearer token)
-   * is stored separately in the OS keychain.
-   */
-  public async addCopilotBYOKProvider(
-    provider: IBYOKProvider,
-    secret: string | null
-  ): Promise<void> {
-    try {
-      await this.appStore._addCopilotBYOKProvider(provider, secret)
-    } catch (e) {
-      log.error(`Error adding BYOK Copilot provider '${provider.name}'`, e)
-      this.postError(e)
-    }
-  }
-
-  /**
-   * Update a BYOK Copilot provider. Pass `secret = undefined` to leave the
-   * stored secret untouched, `null` to clear it, or a string to overwrite it.
-   */
-  public async updateCopilotBYOKProvider(
-    provider: IBYOKProvider,
-    secret: string | null | undefined
-  ): Promise<void> {
-    try {
-      await this.appStore._updateCopilotBYOKProvider(provider, secret)
-    } catch (e) {
-      log.error(`Error updating BYOK Copilot provider '${provider.name}'`, e)
-      this.postError(e)
-    }
-  }
-
-  /** Remove a BYOK Copilot provider and its stored secret. */
-  public async deleteCopilotBYOKProvider(id: string): Promise<void> {
-    try {
-      await this.appStore._deleteCopilotBYOKProvider(id)
-    } catch (e) {
-      log.error(`Error deleting BYOK Copilot provider '${id}'`, e)
-      this.postError(e)
-    }
   }
 }

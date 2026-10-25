@@ -14,7 +14,6 @@ import { BranchAlreadyUpToDate } from './branch-already-up-to-date-banner'
 import { SuccessfulCherryPick } from './successful-cherry-pick'
 import { CherryPickConflictsBanner } from './cherry-pick-conflicts-banner'
 import { CherryPickUndone } from './cherry-pick-undone'
-import { OpenThankYouCard } from './open-thank-you-card'
 import { SuccessfulSquash } from './successful-squash'
 import { SuccessBanner } from './success-banner'
 import { ConflictsFoundBanner } from './conflicts-found-banner'
@@ -99,16 +98,6 @@ export function renderBanner(
           targetBranchName={banner.targetBranchName}
           countCherryPicked={banner.countCherryPicked}
           onDismissed={onDismissed}
-        />
-      )
-    case BannerType.OpenThankYouCard:
-      return (
-        <OpenThankYouCard
-          key="open-thank-you-card"
-          emoji={banner.emoji}
-          onDismissed={onDismissed}
-          onOpenCard={banner.onOpenCard}
-          onThrowCardAway={banner.onThrowCardAway}
         />
       )
     case BannerType.SuccessfulSquash:

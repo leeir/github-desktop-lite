@@ -34,10 +34,7 @@ export type MenuEvent =
   | 'go-to-commit-message'
   | 'open-pull-request'
   | 'install-darwin-cli'
-  | 'install-windows-cli'
-  | 'uninstall-windows-cli'
   | 'open-external-editor'
-  | 'open-in-copilot-app'
   | 'open-with-external-editor'
   | 'select-all'
   | 'show-stashed-changes'
@@ -58,10 +55,8 @@ export type MenuEvent =
 const TestMenuEvents = [
   'boomtown',
   'test-app-error',
-  'test-arm64-banner',
   'test-confirm-committing-conflicted-files',
   'test-cherry-pick-conflicts-banner',
-  'test-copilot-snapshot-card',
   'test-discarded-changes-will-be-unrecoverable',
   'test-do-you-want-fork-this-repository',
   'test-files-too-large',
@@ -77,22 +72,14 @@ const TestMenuEvents = [
   'test-prune-branches',
   'test-push-rejected',
   'test-re-authorization-required',
-  'test-release-notes-popup',
   'test-reorder-banner',
-  'test-send-stats',
-  'test-showcase-update-banner',
-  'test-thank-you-banner',
-  'test-thank-you-popup',
   'test-token-expiration',
   'test-unable-to-locate-git',
   'test-unable-to-open-shell',
   'test-undone-banner',
   'test-untrusted-server',
-  'test-update-banner',
-  'test-prioritized-update-banner',
   'test-update-existing-git-lfs-filters',
   'test-upstream-already-exists',
-  'test-about-dialog',
   'test-cli-action',
 ] as const
 

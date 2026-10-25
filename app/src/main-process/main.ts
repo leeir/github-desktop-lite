@@ -17,11 +17,6 @@ import { AppWindow } from './app-window'
 import { buildDefaultMenu, getAllMenuItems } from './menu'
 import { shellNeedsPatching, updateEnvironmentForProcess } from '../lib/shell'
 import { parseAppURL } from '../lib/parse-app-url'
-import {
-  handleSquirrelEvent,
-  installWindowsCLI,
-  uninstallWindowsCLI,
-} from './squirrel-updater'
 import { fatalError } from '../lib/fatal-error'
 
 import { log as writeLog } from './log'
@@ -54,7 +49,7 @@ import {
 import { initializeDesktopNotifications } from './notifications'
 import parseCommandLineArgs from 'minimist'
 import { CLIAction } from '../lib/cli-action'
-import { isLite } from '../lib/feature-flag'
+import { registerAIClientHandlers } from './ai-client'
 
 app.setAppLogsPath()
 enableSourceMaps()
@@ -106,22 +101,11 @@ function getExtraErrorContext(): Record<string, string> {
 /** Extra argument for the protocol launcher on Windows */
 const protocolLauncherArg = '--protocol-launcher'
 
-const possibleProtocols = new Set<string>(isLite() ? [] : ['x-github-client'])
-if (__DEV_SECRETS__) {
-  possibleProtocols.add('x-github-desktop-dev-auth')
-} else {
-  possibleProtocols.add(
-    isLite() ? 'x-github-desktop-lite-auth' : 'x-github-desktop-auth'
-  )
-}
-// Also support Desktop Classic's protocols.
-if (isLite()) {
-  // Lite leaves the Classic protocols to the official app.
-} else if (__DARWIN__) {
-  possibleProtocols.add('github-mac')
-} else if (__WIN32__) {
-  possibleProtocols.add('github-windows')
-}
+// Only our own OAuth callback: x-github-client and the Desktop Classic
+// protocols are left to the official app so the two can coexist.
+const possibleProtocols = new Set<string>([
+  __DEV_SECRETS__ ? 'x-github-desktop-dev-auth' : 'x-github-desktop-lite-auth',
+])
 
 // On Windows, in order to get notifications properly working for dev builds,
 // we'll want to set the right App User Model ID from production builds.
@@ -145,22 +129,7 @@ process.on('uncaughtException', (error: Error) => {
   handleUncaughtException(error)
 })
 
-let handlingSquirrelEvent = false
-if (__WIN32__ && process.argv.length > 1) {
-  const arg = process.argv[1]
-  const promise = handleSquirrelEvent(arg)
-
-  if (promise) {
-    handlingSquirrelEvent = true
-    promise
-      .catch(e => log.error(`Failed handling Squirrel event: ${arg}`, e))
-      .then(() => app.quit())
-  }
-}
-
-if (!handlingSquirrelEvent) {
-  handleCommandLineArguments(process.argv)
-}
+handleCommandLineArguments(process.argv)
 
 initializeDesktopNotifications()
 
@@ -176,10 +145,7 @@ function handleAppURL(url: string) {
 }
 
 let isDuplicateInstance = false
-// If we're handling a Squirrel event we don't want to enforce single instance.
-// We want to let the updated instance launch and do its work. It will then quit
-// once it's done.
-if (!handlingSquirrelEvent) {
+{
   const gotSingleInstanceLock = app.requestSingleInstanceLock()
   isDuplicateInstance = !gotSingleInstanceLock
 
@@ -341,7 +307,7 @@ if (process.env.GITHUB_DESKTOP_DISABLE_HARDWARE_ACCELERATION) {
 }
 
 app.on('ready', () => {
-  if (isDuplicateInstance || handlingSquirrelEvent) {
+  if (isDuplicateInstance) {
     return
   }
 
@@ -468,6 +434,8 @@ app.on('ready', () => {
    * An event sent by the renderer asking that the menu item with the given id
    * is executed (ie clicked).
    */
+  registerAIClientHandlers()
+
   ipcMain.on('execute-menu-item-by-id', (event, id) => {
     const currentMenu = Menu.getApplicationMenu()
 
@@ -547,14 +515,6 @@ app.on('ready', () => {
     clipboard.writeText(text)
   )
 
-  ipcMain.handle('check-for-updates', async (_, url) =>
-    mainWindow?.checkForUpdates(url)
-  )
-
-  ipcMain.on('quit-and-install-updates', () =>
-    mainWindow?.quitAndInstallUpdate()
-  )
-
   ipcMain.on('quit-app', () => app.quit())
 
   ipcMain.on('minimize-window', () => mainWindow?.minimizeWindow())
@@ -585,11 +545,6 @@ app.on('ready', () => {
   ipcMain.on('set-window-zoom-factor', (_, zoomFactor: number) =>
     mainWindow?.setWindowZoomFactor(zoomFactor)
   )
-
-  if (__WIN32__) {
-    ipcMain.on('install-windows-cli', installWindowsCLI)
-    ipcMain.on('uninstall-windows-cli', uninstallWindowsCLI)
-  }
 
   /**
    * An event sent by the renderer asking for a copy of the current

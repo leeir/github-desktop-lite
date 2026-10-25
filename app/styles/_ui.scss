@@ -35,7 +35,7 @@
 @import 'ui/welcome';
 @import 'ui/foldout';
 @import 'ui/preferences';
-@import 'ui/copilot-preferences';
+@import 'ui/ai-settings';
 @import 'ui/test-token-expiration';
 @import 'ui/path-text';
 @import 'ui/path-label';
@@ -81,10 +81,6 @@
 @import 'ui/cloneable-repository-filter-list';
 @import 'ui/stash-diff-viewer';
 @import 'ui/commit-details';
-@import 'ui/onboarding-tutorial/right-panel';
-@import 'ui/onboarding-tutorial/welcome';
-@import 'ui/onboarding-tutorial/nudge-arrow';
-@import 'ui/onboarding-tutorial/done';
 @import 'ui/suggested-actions/suggested-action';
 @import 'ui/suggested-actions/suggested-action-group';
 @import 'ui/config-lock-file-exists';
@@ -109,7 +105,6 @@
 @import 'ui/_git-email-not-found-warning';
 @import 'ui/_branch-select';
 @import 'ui/_popover-dropdown';
-@import 'ui/copilot-model-picker';
 @import 'ui/_pull-request-files-changed';
 @import 'ui/_pull-request-merge-status';
 @import 'ui/_open-pull-request-header';
@@ -117,4 +112,3 @@
 @import 'ui/repository-rules/_repo-rules-failure-list';
 @import 'ui/account-picker';
 @import 'ui/call-to-action-bubble';
-@import 'ui/copilot-conflict-resolution';

@@ -5,21 +5,17 @@
 @import 'dialogs/push-needs-pull';
 @import 'dialogs/publish-repository';
 @import 'dialogs/repository-settings';
-@import 'dialogs/release-notes';
 @import 'dialogs/usage-reporting';
 @import 'dialogs/stash-changes';
 @import 'dialogs/commit-conflicts-warning';
-@import 'dialogs/create-tutorial-repository';
 @import 'dialogs/create-fork';
 @import 'dialogs/fork-settings';
 @import 'dialogs/cherry-pick';
-@import 'dialogs/thank-you';
 @import 'dialogs/commit-message';
 @import 'dialogs/choose-branch';
 @import 'dialogs/ci-check-run-rerun';
 @import 'dialogs/unreachable-commits';
 @import 'dialogs/open-pull-request';
-@import 'dialogs/installing-update';
 @import 'dialogs/test-notifications';
 @import 'dialogs/pull-request-comment-like';
 @import 'dialogs/unknown-authors';
@@ -27,8 +23,6 @@
 @import 'dialogs/push-protection';
 @import 'dialogs/hook-failed';
 @import 'dialogs/commit_progress';
-@import 'dialogs/copilot-conflicts-loading';
-@import 'dialogs/copilot-app-not-found';
 
 // The styles herein attempt to follow a flow where margins are only applied
 // to the bottom of elements (with the exception of the last child). This to
@@ -506,23 +500,11 @@ dialog {
         padding-bottom: var(--spacing);
       }
     }
-
-    &#release-notes {
-      .dialog-content {
-        max-height: calc(100vh - 200px) !important;
-      }
-    }
   }
 
   @media (max-width: 600px) {
     min-width: calc(100% - var(--spacing-double)) !important;
     max-width: calc(100% - var(--spacing-double)) !important;
-
-    &#release-notes {
-      .container {
-        flex-direction: column;
-      }
-    }
   }
 
   &#preferences {
@@ -550,14 +532,9 @@ dialog {
         overflow: auto;
       }
 
-      &.copilot-tab {
-        padding: 0;
-
-        .copilot-tab-content {
-          padding: 0;
-          max-height: $default-tab-height;
-          overflow: hidden;
-        }
+      &.ai-settings {
+        max-height: $default-tab-height;
+        overflow: auto;
       }
     }
   }

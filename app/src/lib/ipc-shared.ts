@@ -17,6 +17,12 @@ import { DesktopNotificationPermission } from 'desktop-notifications'
 import { NotificationCallback } from 'desktop-notifications'
 import { DesktopAliveEvent } from './stores/alive-store'
 import { CLIAction } from './cli-action'
+import type {
+  ILLMConnection,
+  ILLMRequest,
+  LLMModelsResult,
+  LLMResult,
+} from './ai/llm-request'
 
 /**
  * Defines the simplex IPC channel names we use from the renderer
@@ -25,6 +31,7 @@ import { CLIAction } from './cli-action'
  * the two over the untyped IPC framework.
  */
 export type RequestChannels = {
+  'ai-cancel': (id: string) => void
   'select-all-window-contents': () => void
   'dialog-did-open': () => void
   'update-menu-state': (
@@ -48,7 +55,6 @@ export type RequestChannels = {
   'menu-event': (name: MenuEvent) => void
   log: (level: LogLevel, message: string) => void
   'will-quit': () => void
-  'will-quit-even-if-updating': () => void
   'cancel-quitting': () => void
   'crash-ready': () => void
   'crash-quit': () => void
@@ -73,26 +79,17 @@ export type RequestChannels = {
     token: string
   ) => void
   'resolved-image-token': (requestId: number, token: string | null) => void
-  'quit-and-install-updates': () => void
   'quit-app': () => void
   'minimize-window': () => void
   'maximize-window': () => void
   'unmaximize-window': () => void
   'close-window': () => void
-  'auto-updater-error': (error: Error) => void
-  'auto-updater-checking-for-update': () => void
-  'auto-updater-update-available': () => void
-  'auto-updater-update-not-available': () => void
-  'auto-updater-update-downloaded': () => void
   'native-theme-updated': () => void
   'set-native-theme-source': (themeName: ThemeSource) => void
   'update-window-background-color': (color: string) => void
   'focus-window': () => void
   'notification-event': NotificationCallback<DesktopAliveEvent>
   'set-window-zoom-factor': (zoomFactor: number) => void
-  'show-installing-update': () => void
-  'install-windows-cli': () => void
-  'uninstall-windows-cli': () => void
 }
 
 /**
@@ -104,6 +101,8 @@ export type RequestChannels = {
  * Return signatures must be promises
  */
 export type RequestResponseChannels = {
+  'ai-complete': (request: ILLMRequest) => Promise<LLMResult>
+  'ai-list-models': (connection: ILLMConnection) => Promise<LLMModelsResult>
   'get-path': (path: PathType) => Promise<string>
   'get-app-architecture': () => Promise<Architecture>
   'get-app-path': () => Promise<string>
@@ -121,7 +120,6 @@ export type RequestResponseChannels = {
   'open-external': (path: string) => Promise<boolean>
   'is-in-application-folder': () => Promise<boolean | null>
   'move-to-applications-folder': () => Promise<void>
-  'check-for-updates': (url: string) => Promise<Error | undefined>
   'get-current-window-state': () => Promise<WindowState | undefined>
   'get-current-window-zoom-factor': () => Promise<number | undefined>
   'resolve-proxy': (url: string) => Promise<string>

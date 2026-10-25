@@ -24,15 +24,6 @@ interface INoRepositoriesProps {
   /** A function to call when the user chooses to add a local repository. */
   readonly onAdd: () => void
 
-  /** Called when the user chooses to create a tutorial repository */
-  readonly onCreateTutorialRepository: () => void
-
-  /** Called when the user chooses to resume a tutorial repository */
-  readonly onResumeTutorialRepository: () => void
-
-  /** true if tutorial is in paused state. */
-  readonly tutorialPaused: boolean
-
   readonly accounts: ReadonlyArray<Account>
 
   /**
@@ -294,33 +285,6 @@ export class NoRepositoriesView extends React.Component<
     )
   }
 
-  private renderTutorialRepositoryButton() {
-    // No tutorial if you're not signed in.
-    if (!this.isUserSignedIn()) {
-      return null
-    }
-
-    if (this.props.tutorialPaused) {
-      return this.renderButtonGroupButton(
-        octicons.mortarBoard,
-        __DARWIN__
-          ? 'Return to In Progress Tutorial'
-          : 'Return to in progress tutorial',
-        this.props.onResumeTutorialRepository,
-        'submit'
-      )
-    } else {
-      return this.renderButtonGroupButton(
-        octicons.mortarBoard,
-        __DARWIN__
-          ? 'Create a Tutorial Repository…'
-          : 'Create a tutorial repository…',
-        this.props.onCreateTutorialRepository,
-        'submit'
-      )
-    }
-  }
-
   private renderCloneButton() {
     return this.renderButtonGroupButton(
       octicons.repoClone,
@@ -357,7 +321,6 @@ export class NoRepositoriesView extends React.Component<
     return (
       <div className="content-pane">
         <div className="button-group">
-          {this.renderTutorialRepositoryButton()}
           {this.renderCloneButton()}
           {this.renderCreateRepositoryButton()}
           {this.renderAddExistingRepositoryButton()}

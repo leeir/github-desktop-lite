@@ -189,47 +189,6 @@ export class RepositoriesStore extends TypedBaseStore<
   }
 
   /**
-   * Add a tutorial repository.
-   *
-   * This method differs from the `addRepository` method in that it requires
-   * that the repository has been created on the remote and set up to track it.
-   * Given that tutorial repositories are created from the no-repositories blank
-   * slate it shouldn't be possible for another repository with the same path to
-   * exist but in case that changes in the future this method will set the
-   * tutorial flag on the existing repository at the given path.
-   */
-  public async addTutorialRepository(
-    path: string,
-    endpoint: string,
-    apiRepo: IAPIFullRepository,
-    gitDir?: string
-  ) {
-    await this.db.transaction(
-      'rw',
-      this.db.repositories,
-      this.db.gitHubRepositories,
-      this.db.owners,
-      async () => {
-        const ghRepo = await this.upsertGitHubRepository(endpoint, apiRepo)
-        const existingRepo = await this.db.repositories.get({ path })
-
-        return await this.db.repositories.put({
-          ...(existingRepo?.id !== undefined && { id: existingRepo.id }),
-          path,
-          alias: null,
-          gitHubRepositoryID: ghRepo.dbID,
-          missing: false,
-          lastStashCheckDate: null,
-          isTutorialRepository: true,
-          gitDir,
-        })
-      }
-    )
-
-    this.emitUpdatedRepositories()
-  }
-
-  /**
    * Add a new local repository.
    *
    * If a repository already exists with that path, it will be returned instead.

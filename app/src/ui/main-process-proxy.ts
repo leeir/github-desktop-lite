@@ -202,6 +202,15 @@ export async function showFolderContents(
 }
 
 export const openExternal = invokeProxy('open-external', 1)
+
+/** Sends a chat completion request to the user's model provider. */
+export const aiComplete = invokeProxy('ai-complete', 1)
+
+/** Lists the models offered by the user's model provider. */
+export const aiListModels = invokeProxy('ai-list-models', 1)
+
+/** Cancels an in-flight {@link aiComplete} request. */
+export const cancelAIRequest = sendProxy('ai-cancel', 1)
 export const moveItemToTrash = invokeProxy('move-to-trash', 1)
 
 const writeClipboardTextProxy = invokeProxy('write-clipboard-text', 1)
@@ -231,55 +240,12 @@ export const sendDialogDidOpen = sendProxy('dialog-did-open', 0)
 /** Tell the main process to set the current window's zoom factor */
 export const setWindowZoomFactor = sendProxy('set-window-zoom-factor', 1)
 
-/** Tell the main process to check for app updates */
-export const checkForUpdates = invokeProxy('check-for-updates', 1)
-
-/** Tell the main process to quit the app and install updates */
-export const quitAndInstallUpdate = sendProxy('quit-and-install-updates', 0)
-
 /** Tell the main process to quit the app */
 export const quitApp = sendProxy('quit-app', 0)
-
-/** Subscribes to auto updater error events originating from the main process */
-export function onAutoUpdaterError(
-  errorHandler: (evt: Electron.IpcRendererEvent, error: Error) => void
-) {
-  ipcRenderer.on('auto-updater-error', errorHandler)
-}
-
-/** Subscribes to auto updater checking for update events originating from the
- * main process */
-export function onAutoUpdaterCheckingForUpdate(eventHandler: () => void) {
-  ipcRenderer.on('auto-updater-checking-for-update', eventHandler)
-}
-
-/** Subscribes to auto updater update available events originating from the
- * main process */
-export function onAutoUpdaterUpdateAvailable(eventHandler: () => void) {
-  ipcRenderer.on('auto-updater-update-available', eventHandler)
-}
-
-/** Subscribes to auto updater update not available events originating from the
- * main process */
-export function onAutoUpdaterUpdateNotAvailable(eventHandler: () => void) {
-  ipcRenderer.on('auto-updater-update-not-available', eventHandler)
-}
-
-/** Subscribes to auto updater update downloaded events originating from the
- * main process */
-export function onAutoUpdaterUpdateDownloaded(eventHandler: () => void) {
-  ipcRenderer.on('auto-updater-update-downloaded', eventHandler)
-}
 
 /** Subscribes to the native theme updated event originating from the main process */
 export function onNativeThemeUpdated(eventHandler: () => void) {
   ipcRenderer.on('native-theme-updated', eventHandler)
-}
-
-/** Subscribes to the "show installing update dialog" event originating from the
- * main process */
-export function onShowInstallingUpdate(eventHandler: () => void) {
-  ipcRenderer.on('show-installing-update', eventHandler)
 }
 
 /** Tell the main process to set the native theme source */
@@ -353,18 +319,6 @@ export const isRunningUnderARM64Translation = invokeProxy(
 export function sendWillQuitSync() {
   // eslint-disable-next-line no-sync
   ipcRenderer.sendSync('will-quit')
-}
-
-/**
- * Tell the main process that we're going to quit, even if the app is installing
- * an update. This means it should allow the window to close.
- *
- * This event is sent synchronously to avoid any races with subsequent calls
- * that would tell the app to quit.
- */
-export function sendWillQuitEvenIfUpdatingSync() {
-  // eslint-disable-next-line no-sync
-  ipcRenderer.sendSync('will-quit-even-if-updating')
 }
 
 /**
@@ -466,7 +420,3 @@ export const requestNotificationsPermission = invokeProxy(
   'request-notifications-permission',
   0
 )
-
-/** Tell the main process to (un)install the CLI on Windows */
-export const installWindowsCLI = sendProxy('install-windows-cli', 0)
-export const uninstallWindowsCLI = sendProxy('uninstall-windows-cli', 0)

@@ -19,7 +19,6 @@ import { BranchesContainer, PullRequestBadge } from '../branches'
 import { assertNever } from '../../lib/fatal-error'
 import { BranchesTab } from '../../models/branches-tab'
 import { PullRequest } from '../../models/pull-request'
-import classNames from 'classnames'
 import { dragAndDropManager } from '../../lib/drag-and-drop-manager'
 import { DragType } from '../../models/drag-drop'
 import { CICheckRunPopover } from '../check-runs/ci-check-run-popover'
@@ -65,9 +64,6 @@ interface IBranchDropdownProps {
 
   /** Are we currently loading pull requests? */
   readonly isLoadingPullRequests: boolean
-
-  /** Whether this component should show its onboarding tutorial nudge arrow */
-  readonly shouldNudge: boolean
 
   readonly showCIStatusPopover: boolean
 
@@ -196,9 +192,7 @@ export class BranchDropdown extends React.Component<IBranchDropdownProps> {
 
     const isOpen = this.props.isOpen
     const currentState: DropdownState = isOpen && canOpen ? 'open' : 'closed'
-    const buttonClassName = classNames('branch-toolbar-button', 'nudge-arrow', {
-      'nudge-arrow-up': this.props.shouldNudge,
-    })
+    const buttonClassName = 'branch-toolbar-button'
 
     if (!enableResizingToolbarButtons()) {
       return (

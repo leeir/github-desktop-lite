@@ -7,7 +7,6 @@ import * as octicons from '../octicons/octicons.generated'
 import { Button } from '../lib/button'
 import { Loading } from '../lib/loading'
 import { BrowserRedirectMessage } from '../lib/authentication-form'
-import { SamplesURL } from '../../lib/stats'
 
 /**
  * The URL to the sign-up page on GitHub.com. Used in conjunction
@@ -93,13 +92,6 @@ export class Start extends React.Component<IStartProps, {}> {
             . For more information about GitHub's privacy practices, see the{' '}
             <LinkButton uri={'https://github.com/site/privacy'}>
               GitHub Privacy Statement.
-            </LinkButton>
-          </p>
-          <p>
-            GitHub Desktop sends usage metrics to improve the product and inform
-            feature decisions.{' '}
-            <LinkButton uri={SamplesURL}>
-              Learn more about user metrics.
             </LinkButton>
           </p>
         </div>

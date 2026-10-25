@@ -137,15 +137,6 @@ declare const log: IDesktopLogger
 
 declare namespace NodeJS {
   interface Process extends EventEmitter {
-    on(
-      event: 'send-non-fatal-exception',
-      listener: (error: Error, context?: { [key: string]: string }) => void
-    ): this
-    emit(
-      event: 'send-non-fatal-exception',
-      error: Error,
-      context?: { [key: string]: string }
-    ): this
     removeListener(event: 'exit', listener: (code: number) => void): this
   }
 }

@@ -5,7 +5,6 @@ import {
 } from './repository'
 import { PullRequest } from './pull-request'
 import { Branch } from './branch'
-import { ReleaseNote, ReleaseSummary } from './release-notes'
 import { IRemote } from './remote'
 import { RetryAction } from './retry-actions'
 import { WorkingDirectoryFileChange } from './status'
@@ -13,7 +12,6 @@ import { PreferencesTab } from './preferences'
 import { Commit, CommitOneLine, ICommitContext } from './commit'
 import { IStashEntry } from './stash-entry'
 import { Account } from '../models/account'
-import { Progress } from './progress'
 import { ITextDiff, DiffSelection, ImageDiffType } from './diff'
 import { RepositorySettingsTab } from '../ui/repository-settings/repository-settings'
 import { ICommitMessage } from './commit-message'
@@ -26,7 +24,6 @@ import { IAPIComment } from '../lib/api'
 import { ISecretScanResult } from '../ui/secret-scanning/push-protection-error-dialog'
 import { BypassReasonType } from '../ui/secret-scanning/bypass-push-protection-dialog'
 import { TerminalOutput, TerminalOutputListener } from '../lib/git'
-import type { IBYOKModel, IBYOKProvider } from '../lib/copilot/byok'
 import { IDeleteWorktreeOptions, WorktreeEntry } from './worktree'
 
 export enum PopupType {
@@ -52,13 +49,11 @@ export enum PopupType {
   CLIInstalled = 'CLIInstalled',
   GenericGitAuthentication = 'GenericGitAuthentication',
   ExternalEditorFailed = 'ExternalEditorFailed',
-  CopilotAppNotFound = 'CopilotAppNotFound',
   OpenWithExternalEditor = 'OpenWithExternalEditor',
   OpenShellFailed = 'OpenShellFailed',
   InitializeLFS = 'InitializeLFS',
   LFSAttributeMismatch = 'LFSAttributeMismatch',
   UpstreamAlreadyExists = 'UpstreamAlreadyExists',
-  ReleaseNotes = 'ReleaseNotes',
   DeletePullRequest = 'DeletePullRequest',
   OversizedFiles = 'OversizedFiles',
   CommitConflictsWarning = 'CommitConflictsWarning',
@@ -68,8 +63,6 @@ export enum PopupType {
   ConfirmOverwriteStash = 'ConfirmOverwriteStash',
   ConfirmDiscardStash = 'ConfirmDiscardStash',
   ConfirmCheckoutCommit = 'ConfirmCheckoutCommit',
-  CreateTutorialRepository = 'CreateTutorialRepository',
-  ConfirmExitTutorial = 'ConfirmExitTutorial',
   PushRejectedDueToMissingWorkflowScope = 'PushRejectedDueToMissingWorkflowScope',
   SAMLReauthRequired = 'SAMLReauthRequired',
   CreateFork = 'CreateFork',
@@ -80,7 +73,6 @@ export enum PopupType {
   ConfirmDiscardSelection = 'ConfirmDiscardSelection',
   MoveToApplicationsFolder = 'MoveToApplicationsFolder',
   ChangeRepositoryAlias = 'ChangeRepositoryAlias',
-  ThankYou = 'ThankYou',
   CommitMessage = 'CommitMessage',
   MultiCommitOperation = 'MultiCommitOperation',
   WarnLocalChangesBeforeUndo = 'WarnLocalChangesBeforeUndo',
@@ -97,32 +89,21 @@ export enum PopupType {
   UnreachableCommits = 'UnreachableCommits',
   StartPullRequest = 'StartPullRequest',
   Error = 'Error',
-  InstallingUpdate = 'InstallingUpdate',
   TestNotifications = 'TestNotifications',
   PullRequestComment = 'PullRequestComment',
   UnknownAuthors = 'UnknownAuthors',
   TestIcons = 'TestIcons',
   ConfirmCommitFilteredChanges = 'ConfirmCommitFilteredChanges',
-  TestAbout = 'TestAbout',
   TestCLIAction = 'TestCLIAction',
-  TestCopilotSnapshotCard = 'TestCopilotSnapshotCard',
   TestTokenExpiration = 'TestTokenExpiration',
   PushProtectionError = 'PushProtectionError',
   BypassPushProtection = 'BypassPushProtection',
   GenerateCommitMessageOverrideWarning = 'GenerateCommitMessageOverrideWarning',
-  GenerateCommitMessageDisclaimer = 'GenerateCommitMessageDisclaimer',
-  CopilotConflictResolutionDisclaimer = 'CopilotConflictResolutionDisclaimer',
   HookFailed = 'HookFailed',
   CommitProgress = 'CommitProgress',
   AddWorktree = 'AddWorktree',
   RenameWorktree = 'RenameWorktree',
   DeleteWorktree = 'DeleteWorktree',
-  EditCopilotBYOKProvider = 'EditCopilotBYOKProvider',
-  EditCopilotBYOKModel = 'EditCopilotBYOKModel',
-  CopilotUserSettings = 'CopilotUserSettings',
-  CopilotCustomProviders = 'CopilotCustomProviders',
-  ConfirmDeleteCopilotBYOKProvider = 'ConfirmDeleteCopilotBYOKProvider',
-  CopilotConflictResolutionAlwaysNudge = 'CopilotConflictResolutionAlwaysNudge',
   DeleteWorktreeFailed = 'DeleteWorktreeFailed',
 }
 
@@ -161,25 +142,6 @@ export type PopupDetail =
       selection: DiffSelection
     }
   | { type: PopupType.Preferences; initialSelectedTab?: PreferencesTab }
-  | {
-      type: PopupType.EditCopilotBYOKProvider
-      provider: IBYOKProvider | null
-    }
-  | {
-      type: PopupType.EditCopilotBYOKModel
-      model: IBYOKModel | null
-      otherModelIds: ReadonlyArray<string>
-      onSave: (model: IBYOKModel) => void
-    }
-  | {
-      type: PopupType.CopilotUserSettings
-      account: Account
-    }
-  | { type: PopupType.CopilotCustomProviders }
-  | {
-      type: PopupType.ConfirmDeleteCopilotBYOKProvider
-      provider: IBYOKProvider
-    }
   | {
       type: PopupType.RepositorySettings
       repository: Repository
@@ -228,7 +190,6 @@ export type PopupDetail =
       onDismiss: () => void
     }
   | { type: PopupType.OpenWithExternalEditor }
-  | { type: PopupType.CopilotAppNotFound }
   | {
       type: PopupType.ExternalEditorFailed
       message: string
@@ -242,10 +203,6 @@ export type PopupDetail =
       type: PopupType.UpstreamAlreadyExists
       repository: Repository
       existingRemote: IRemote
-    }
-  | {
-      type: PopupType.ReleaseNotes
-      newReleases: ReadonlyArray<ReleaseSummary>
     }
   | {
       type: PopupType.DeletePullRequest
@@ -298,14 +255,6 @@ export type PopupDetail =
       commit: CommitOneLine
     }
   | {
-      type: PopupType.CreateTutorialRepository
-      account: Account
-      progress?: Progress
-    }
-  | {
-      type: PopupType.ConfirmExitTutorial
-    }
-  | {
       type: PopupType.PushRejectedDueToMissingWorkflowScope
       rejectedPath: string
       repository: RepositoryWithGitHubRepository
@@ -345,12 +294,6 @@ export type PopupDetail =
     }
   | { type: PopupType.MoveToApplicationsFolder }
   | { type: PopupType.ChangeRepositoryAlias; repository: Repository }
-  | {
-      type: PopupType.ThankYou
-      userContributions: ReadonlyArray<ReleaseNote>
-      friendlyName: string
-      latestVersion: string | null
-    }
   | {
       type: PopupType.CommitMessage
       coAuthors: ReadonlyArray<Author>
@@ -451,9 +394,6 @@ export type PopupDetail =
       error: Error
     }
   | {
-      type: PopupType.InstallingUpdate
-    }
-  | {
       type: PopupType.TestNotifications
       repository: RepositoryWithGitHubRepository
     }
@@ -479,13 +419,7 @@ export type PopupDetail =
       showFilesToBeCommitted: () => void
     }
   | {
-      type: PopupType.TestAbout
-    }
-  | {
       type: PopupType.TestCLIAction
-    }
-  | {
-      type: PopupType.TestCopilotSnapshotCard
     }
   | {
       type: PopupType.TestTokenExpiration
@@ -507,21 +441,6 @@ export type PopupDetail =
       type: PopupType.GenerateCommitMessageOverrideWarning
       repository: Repository
       filesSelected: ReadonlyArray<WorkingDirectoryFileChange>
-    }
-  | {
-      type: PopupType.GenerateCommitMessageDisclaimer
-      // Same parameters as PopupType.GenerateCommitMessageOverrideWarning because
-      // from this popup we will trigger the commit message generation too.
-      repository: Repository
-      filesSelected: ReadonlyArray<WorkingDirectoryFileChange>
-    }
-  | {
-      type: PopupType.CopilotConflictResolutionDisclaimer
-      repository: Repository
-    }
-  | {
-      type: PopupType.CopilotConflictResolutionAlwaysNudge
-      repository: Repository
     }
   | {
       type: PopupType.HookFailed

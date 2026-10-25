@@ -29,7 +29,6 @@ import {
   AppStore,
   GitHubUserStore,
   CloningRepositoriesStore,
-  CopilotStore,
   IssuesStore,
   SignInStore,
   RepositoriesStore,
@@ -39,7 +38,7 @@ import {
 } from '../lib/stores'
 import { GitHubUserDatabase } from '../lib/databases'
 import { SelectionType, IAppState } from '../lib/app-state'
-import { StatsDatabase, StatsStore } from '../lib/stats'
+import { StatsStore } from '../lib/stats'
 import {
   IssuesDatabase,
   RepositoriesDatabase,
@@ -53,7 +52,6 @@ import {
   enableSourceMaps,
   withSourceMappedStack,
 } from '../lib/source-map-support'
-import { UiActivityMonitor } from './lib/ui-activity-monitor'
 import { RepositoryStateCache } from '../lib/stores/repository-state-cache'
 import { ApiRepositoriesStore } from '../lib/stores/api-repositories-store'
 import { CommitStatusStore } from '../lib/stores/commit-status-store'
@@ -221,14 +219,6 @@ const onUncaughtException = (error: unknown) => {
 
 process.on('uncaughtException', onUncaughtException)
 
-// See sendNonFatalException for more information
-process.on(
-  'send-non-fatal-exception',
-  (error: Error, context?: { [key: string]: string }) => {
-    sendErrorWithContext(error, context, true)
-  }
-)
-
 /**
  * Chromium won't crash on an unhandled rejection (similar to how it won't crash
  * on an unhandled error). We've taken the approach that unhandled errors should
@@ -252,10 +242,7 @@ const gitHubUserStore = new GitHubUserStore(
 )
 const cloningRepositoriesStore = new CloningRepositoriesStore()
 const issuesStore = new IssuesStore(new IssuesDatabase('IssuesDatabase'))
-const statsStore = new StatsStore(
-  new StatsDatabase('StatsDatabase'),
-  new UiActivityMonitor()
-)
+const statsStore = new StatsStore()
 
 const accountsStore = new AccountsStore(localStorage, TokenStore)
 API.setTokenProvider(accountsStore.resolveToken)
@@ -297,8 +284,6 @@ const aheadBehindStore = new AheadBehindStore()
 
 const aliveStore = new AliveStore(accountsStore)
 
-const copilotStore = new CopilotStore(accountsStore)
-
 const notificationsStore = new NotificationsStore(
   accountsStore,
   aliveStore,
@@ -323,8 +308,7 @@ const appStore = new AppStore(
   pullRequestCoordinator,
   repositoryStateManager,
   apiRepositoriesStore,
-  notificationsStore,
-  copilotStore
+  notificationsStore
 )
 
 appStore.onDidUpdate(state => {

@@ -42,16 +42,12 @@ import { Prompts } from './prompts'
 import { Repository } from '../../models/repository'
 import { Notifications } from './notifications'
 import { Accessibility } from './accessibility'
-import { CopilotPreferences } from './copilot'
-import type {
-  CopilotFeature,
-  CopilotModelsByAccount,
-  CopilotModelSelectionsByAccount,
-  CopilotQuotaSnapshotsByAccount,
-} from '../../lib/stores/copilot-store'
-import { getCopilotAccountCacheKey } from '../../lib/stores/copilot-store'
-import type { IBYOKProvider } from '../../lib/copilot/byok'
-import { PopupType } from '../../models/popup'
+import { AISettings } from './ai-settings'
+import {
+  getAIProviderPreset,
+  IAISettings,
+  isValidBaseUrl,
+} from '../../lib/ai/providers'
 import {
   ICustomIntegration,
   TargetPathArgument,
@@ -67,7 +63,6 @@ import {
   setGitHookEnvShell,
   setHooksEnvEnabled,
 } from '../../lib/hooks/config'
-import { enableCopilotSdkCommitMessageGeneration } from '../../lib/feature-flag'
 import {
   DateFormat,
   TimeFormat,
@@ -80,11 +75,10 @@ import {
   setTimeFormatPreference,
   setNumberFormatPreference,
 } from '../../models/formatting-preferences'
-import {
-  enableCopilotAppHandoff,
-  enableFormattingPreferences,
-} from '../../lib/feature-flag'
-import { validateCopilotAppPath } from '../../lib/copilot-app'
+import { enableFormattingPreferences } from '../../lib/feature-flag'
+
+/** What a fresh AI settings form starts with. */
+const DefaultAISettings: IAISettings = { providerId: 'openrouter', model: '' }
 
 interface IPreferencesProps {
   readonly dispatcher: Dispatcher
@@ -94,8 +88,6 @@ interface IPreferencesProps {
   readonly useWindowsOpenSSH: boolean
   readonly showCommitLengthWarning: boolean
   readonly notificationsEnabled: boolean
-  readonly optOutOfUsageTracking: boolean
-  readonly useExternalCredentialHelper: boolean
   readonly initialSelectedTab?: PreferencesTab
   readonly confirmRepositoryRemoval: boolean
   readonly confirmDiscardChanges: boolean
@@ -117,16 +109,11 @@ interface IPreferencesProps {
   readonly customEditor: ICustomIntegration | null
   readonly useCustomShell: boolean
   readonly customShell: ICustomIntegration | null
-  readonly copilotAppPath: string | null
   readonly repositoryIndicatorsEnabled: boolean
   readonly onEditGlobalGitConfig: () => void
   readonly underlineLinks: boolean
   readonly showDiffCheckMarks: boolean
-  readonly selectedCopilotModelsByAccount: CopilotModelSelectionsByAccount
-  readonly copilotModelsByAccount: CopilotModelsByAccount
-  readonly copilotQuotaSnapshotsByAccount: CopilotQuotaSnapshotsByAccount
-  readonly byokProviders: ReadonlyArray<IBYOKProvider>
-  readonly alwaysUseCopilotForConflictResolution: boolean
+  readonly aiSettings: IAISettings | null
 }
 
 interface IPreferencesState {
@@ -141,8 +128,6 @@ interface IPreferencesState {
   readonly useWindowsOpenSSH: boolean
   readonly showCommitLengthWarning: boolean
   readonly notificationsEnabled: boolean
-  readonly optOutOfUsageTracking: boolean
-  readonly useExternalCredentialHelper: boolean
   readonly confirmRepositoryRemoval: boolean
   readonly confirmDiscardChanges: boolean
   readonly confirmDiscardChangesPermanently: boolean
@@ -159,8 +144,6 @@ interface IPreferencesState {
   readonly customEditor: ICustomIntegration
   readonly useCustomShell: boolean
   readonly customShell: ICustomIntegration
-  readonly copilotAppPath: string
-  readonly copilotAppPathError?: string
   readonly selectedExternalEditor: string | null
   readonly availableShells: ReadonlyArray<Shell>
   readonly selectedShell: Shell
@@ -192,8 +175,10 @@ interface IPreferencesState {
   // Whether the preferences related to Git hooks environment have been changed
   readonly hooksPreferencesDirty: boolean
 
-  readonly selectedCopilotModelsByAccount: CopilotModelSelectionsByAccount
-  readonly alwaysUseCopilotForConflictResolution: boolean
+  readonly aiSettings: IAISettings
+  /** A newly entered API key, or undefined to keep the stored one. */
+  readonly aiApiKey: string | undefined
+  readonly aiSettingsError?: string
   readonly selectedDateFormat?: DateFormat
   readonly selectedTimeFormat?: TimeFormat
   readonly selectedNumberFormat?: INumberFormat
@@ -232,12 +217,9 @@ export class Preferences extends React.Component<
       customEditor: this.props.customEditor ?? DefaultCustomIntegration,
       useCustomShell: this.props.useCustomShell,
       customShell: this.props.customShell ?? DefaultCustomIntegration,
-      copilotAppPath: this.props.copilotAppPath ?? '',
       useWindowsOpenSSH: false,
       showCommitLengthWarning: false,
       notificationsEnabled: true,
-      optOutOfUsageTracking: false,
-      useExternalCredentialHelper: false,
       confirmRepositoryRemoval: false,
       confirmDiscardChanges: false,
       confirmDiscardChangesPermanently: false,
@@ -263,9 +245,8 @@ export class Preferences extends React.Component<
       cacheGitHookEnv: getCacheHooksEnv(),
       selectedGitHookEnvShell: getGitHookEnvShell(),
       hooksPreferencesDirty: false,
-      selectedCopilotModelsByAccount: this.props.selectedCopilotModelsByAccount,
-      alwaysUseCopilotForConflictResolution:
-        this.props.alwaysUseCopilotForConflictResolution,
+      aiSettings: this.props.aiSettings ?? DefaultAISettings,
+      aiApiKey: undefined,
       selectedDateFormat: getDateFormatPreference(),
       selectedTimeFormat: getTimeFormatPreference(),
       selectedNumberFormat: getNumberFormatPreference(),
@@ -304,12 +285,6 @@ export class Preferences extends React.Component<
       getAvailableShells(),
     ])
 
-    // Kick off Copilot model list fetch (non-blocking)
-    if (this.isCopilotSdkEnabled) {
-      this.props.dispatcher.fetchCopilotModels()
-      this.props.dispatcher.fetchCopilotQuotaSnapshots()
-    }
-
     const availableEditors = editors.map(e => e.editor) ?? null
     const availableShells = shells.map(e => e.shell) ?? null
 
@@ -323,8 +298,6 @@ export class Preferences extends React.Component<
       useWindowsOpenSSH: this.props.useWindowsOpenSSH,
       showCommitLengthWarning: this.props.showCommitLengthWarning,
       notificationsEnabled: this.props.notificationsEnabled,
-      optOutOfUsageTracking: this.props.optOutOfUsageTracking,
-      useExternalCredentialHelper: this.props.useExternalCredentialHelper,
       confirmRepositoryRemoval: this.props.confirmRepositoryRemoval,
       confirmDiscardChanges: this.props.confirmDiscardChanges,
       confirmDiscardChangesPermanently:
@@ -344,31 +317,8 @@ export class Preferences extends React.Component<
       customEditor: this.props.customEditor ?? DefaultCustomIntegration,
       useCustomShell: this.props.useCustomShell,
       customShell: this.props.customShell ?? DefaultCustomIntegration,
-      copilotAppPath: this.props.copilotAppPath ?? '',
       isLoadingGitConfig: false,
     })
-  }
-
-  public componentDidUpdate(prevProps: IPreferencesProps) {
-    if (
-      prevProps.selectedCopilotModelsByAccount !==
-      this.props.selectedCopilotModelsByAccount
-    ) {
-      this.setState({
-        selectedCopilotModelsByAccount:
-          this.props.selectedCopilotModelsByAccount,
-      })
-    }
-
-    if (
-      prevProps.alwaysUseCopilotForConflictResolution !==
-      this.props.alwaysUseCopilotForConflictResolution
-    ) {
-      this.setState({
-        alwaysUseCopilotForConflictResolution:
-          this.props.alwaysUseCopilotForConflictResolution,
-      })
-    }
   }
 
   private onCancel = () => {
@@ -394,7 +344,7 @@ export class Preferences extends React.Component<
         <div className="preferences-container">
           <TabBar
             onTabClicked={this.onTabClicked}
-            selectedIndex={this.tabToVisualIndex(this.state.selectedIndex)}
+            selectedIndex={this.state.selectedIndex}
             type={TabBarType.Vertical}
           >
             <span id={this.getTabId(PreferencesTab.Accounts)}>
@@ -405,12 +355,10 @@ export class Preferences extends React.Component<
               <Octicon className="icon" symbol={octicons.person} />
               Integrations
             </span>
-            {this.isCopilotSdkEnabled && (
-              <span id={this.getTabId(PreferencesTab.Copilot)}>
-                <Octicon className="icon" symbol={octicons.copilot} />
-                Copilot
-              </span>
-            )}
+            <span id={this.getTabId(PreferencesTab.AI)}>
+              <Octicon className="icon" symbol={octicons.sparkle} />
+              AI
+            </span>
             <span id={this.getTabId(PreferencesTab.Git)}>
               <Octicon className="icon" symbol={octicons.gitCommit} />
               Git
@@ -453,8 +401,8 @@ export class Preferences extends React.Component<
       case PreferencesTab.Integrations:
         suffix = 'integrations'
         break
-      case PreferencesTab.Copilot:
-        suffix = 'copilot'
+      case PreferencesTab.AI:
+        suffix = 'ai'
         break
       case PreferencesTab.Git:
         suffix = 'git'
@@ -489,22 +437,6 @@ export class Preferences extends React.Component<
   private onEnterpriseSignIn = () => {
     this.props.onDismissed()
     this.props.dispatcher.showEnterpriseSignInDialog()
-  }
-
-  private onCopilotSignIn = () => {
-    this.setState({ selectedIndex: PreferencesTab.Accounts })
-  }
-
-  private onOpenCopilotPlans = () => {
-    this.props.dispatcher.openInBrowser(
-      'https://github.com/features/copilot/plans'
-    )
-  }
-
-  private onOpenCopilotFeatureSettings = () => {
-    this.props.dispatcher.openInBrowser(
-      'https://github.com/settings/copilot/features'
-    )
   }
 
   private onLogout = (account: Account) => {
@@ -565,43 +497,23 @@ export class Preferences extends React.Component<
             customEditor={this.state.customEditor}
             useCustomShell={this.state.useCustomShell}
             customShell={this.state.customShell}
-            copilotAppPath={this.state.copilotAppPath}
-            copilotAppPathError={this.state.copilotAppPathError}
             onSelectedShellChanged={this.onSelectedShellChanged}
             onUseCustomEditorChanged={this.onUseCustomEditorChanged}
             onCustomEditorChanged={this.onCustomEditorChanged}
             onUseCustomShellChanged={this.onUseCustomShellChanged}
             onCustomShellChanged={this.onCustomShellChanged}
-            onCopilotAppPathChanged={this.onCopilotAppPathChanged}
           />
         )
         break
       }
-      case PreferencesTab.Copilot:
+      case PreferencesTab.AI:
         View = (
-          <CopilotPreferences
-            selectedCopilotModelsByAccount={
-              this.state.selectedCopilotModelsByAccount
-            }
-            copilotModelsByAccount={this.props.copilotModelsByAccount}
-            copilotQuotaSnapshotsByAccount={
-              this.props.copilotQuotaSnapshotsByAccount
-            }
-            accounts={this.props.accounts}
-            byokProviders={this.props.byokProviders}
-            showBYOKSettings={this.shouldShowBYOKSettings()}
-            onSignIn={this.onCopilotSignIn}
-            onOpenCopilotPlans={this.onOpenCopilotPlans}
-            onOpenCopilotFeatureSettings={this.onOpenCopilotFeatureSettings}
-            alwaysUseCopilotForConflictResolution={
-              this.state.alwaysUseCopilotForConflictResolution
-            }
-            onSelectedCopilotModelChanged={this.onSelectedCopilotModelChanged}
-            onAlwaysUseCopilotForConflictResolutionChanged={
-              this.onAlwaysUseCopilotForConflictResolutionChanged
-            }
-            onConfigureCustomProviders={this.onConfigureCustomProviders}
-            onConfigureModels={this.onConfigureCopilotModels}
+          <AISettings
+            settings={this.state.aiSettings}
+            apiKey={this.state.aiApiKey}
+            error={this.state.aiSettingsError}
+            onSettingsChanged={this.onAISettingsChanged}
+            onApiKeyChanged={this.onAIApiKeyChanged}
           />
         )
         break
@@ -741,14 +653,8 @@ export class Preferences extends React.Component<
         View = (
           <Advanced
             useWindowsOpenSSH={this.state.useWindowsOpenSSH}
-            optOutOfUsageTracking={this.state.optOutOfUsageTracking}
-            useExternalCredentialHelper={this.state.useExternalCredentialHelper}
             repositoryIndicatorsEnabled={this.state.repositoryIndicatorsEnabled}
             onUseWindowsOpenSSHChanged={this.onUseWindowsOpenSSHChanged}
-            onOptOutofReportingChanged={this.onOptOutofReportingChanged}
-            onUseExternalCredentialHelperChanged={
-              this.onUseExternalCredentialHelperChanged
-            }
             onRepositoryIndicatorsEnabledChanged={
               this.onRepositoryIndicatorsEnabledChanged
             }
@@ -807,14 +713,6 @@ export class Preferences extends React.Component<
 
   private onNotificationsEnabledChanged = (notificationsEnabled: boolean) => {
     this.setState({ notificationsEnabled })
-  }
-
-  private onOptOutofReportingChanged = (value: boolean) => {
-    this.setState({ optOutOfUsageTracking: value })
-  }
-
-  private onUseExternalCredentialHelperChanged = (value: boolean) => {
-    this.setState({ useExternalCredentialHelper: value })
   }
 
   private onConfirmRepositoryRemovalChanged = (value: boolean) => {
@@ -922,10 +820,6 @@ export class Preferences extends React.Component<
     this.setState({ customShell })
   }
 
-  private onCopilotAppPathChanged = (copilotAppPath: string) => {
-    this.setState({ copilotAppPath, copilotAppPathError: undefined })
-  }
-
   private onSelectedThemeChanged = (theme: ApplicationTheme) => {
     this.props.dispatcher.setSelectedTheme(theme)
   }
@@ -936,58 +830,6 @@ export class Preferences extends React.Component<
 
   private onShowDiffCheckMarksChanged = (showDiffCheckMarks: boolean) => {
     this.setState({ showDiffCheckMarks })
-  }
-
-  private onSelectedCopilotModelChanged = (
-    account: Account,
-    feature: CopilotFeature,
-    model: string | null
-  ) => {
-    this.setState(state => {
-      const accountKey = getCopilotAccountCacheKey(account)
-      const selections = {
-        ...state.selectedCopilotModelsByAccount.get(accountKey),
-      }
-      if (model === null) {
-        delete selections[feature]
-      } else {
-        selections[feature] = model
-      }
-
-      const selectedCopilotModelsByAccount = new Map(
-        state.selectedCopilotModelsByAccount
-      )
-      if (Object.keys(selections).length === 0) {
-        selectedCopilotModelsByAccount.delete(accountKey)
-      } else {
-        selectedCopilotModelsByAccount.set(accountKey, selections)
-      }
-
-      return { selectedCopilotModelsByAccount }
-    })
-  }
-
-  private onAlwaysUseCopilotForConflictResolutionChanged = (
-    checked: boolean
-  ) => {
-    this.setState({ alwaysUseCopilotForConflictResolution: checked })
-  }
-
-  private shouldShowBYOKSettings(): boolean {
-    return this.props.accounts.some(enableCopilotSdkCommitMessageGeneration)
-  }
-
-  private onConfigureCustomProviders = () => {
-    this.props.dispatcher.showPopup({
-      type: PopupType.CopilotCustomProviders,
-    })
-  }
-
-  private onConfigureCopilotModels = (account: Account) => {
-    this.props.dispatcher.showPopup({
-      type: PopupType.CopilotUserSettings,
-      account,
-    })
   }
 
   private onSelectedTabSizeChanged = (tabSize: number) => {
@@ -1015,22 +857,10 @@ export class Preferences extends React.Component<
 
   private onSave = async () => {
     const { dispatcher } = this.props
-    const copilotAppPath = this.state.copilotAppPath.trim()
-    const initialCopilotAppPath = this.props.copilotAppPath?.trim() ?? ''
-    const copilotAppPathChanged = copilotAppPath !== initialCopilotAppPath
 
-    if (
-      enableCopilotAppHandoff() &&
-      copilotAppPathChanged &&
-      copilotAppPath.length > 0 &&
-      !(await validateCopilotAppPath(copilotAppPath))
-    ) {
-      this.setState({
-        selectedIndex: PreferencesTab.Integrations,
-        copilotAppPathError: __DARWIN__
-          ? 'Choose the GitHub Copilot application (.app).'
-          : 'Choose the GitHub Copilot executable (github.exe).',
-      })
+    const aiSettingsError = this.validateAISettings()
+    if (aiSettingsError !== undefined) {
+      this.setState({ selectedIndex: PreferencesTab.AI, aiSettingsError })
       return
     }
 
@@ -1109,8 +939,6 @@ export class Preferences extends React.Component<
     dispatcher.setShowCommitLengthWarning(this.state.showCommitLengthWarning)
     dispatcher.setNotificationsEnabled(this.state.notificationsEnabled)
 
-    await dispatcher.setStatsOptOut(this.state.optOutOfUsageTracking, false)
-
     const { useCustomEditor, customEditor, useCustomShell, customShell } =
       this.state
 
@@ -1126,21 +954,6 @@ export class Preferences extends React.Component<
     dispatcher.setUseCustomShell(useCustomShell && isValidCustomShell)
     if (isValidCustomShell) {
       dispatcher.setCustomShell(customShell)
-    }
-
-    if (enableCopilotAppHandoff() && copilotAppPathChanged) {
-      await dispatcher.setCopilotAppPath(
-        copilotAppPath.length === 0 ? null : copilotAppPath
-      )
-    }
-
-    if (
-      this.props.useExternalCredentialHelper !==
-      this.state.useExternalCredentialHelper
-    ) {
-      dispatcher.setUseExternalCredentialHelper(
-        this.state.useExternalCredentialHelper
-      )
     }
 
     await dispatcher.setConfirmRepoRemovalSetting(
@@ -1188,13 +1001,7 @@ export class Preferences extends React.Component<
     dispatcher.setDiffCheckMarksSetting(this.state.showDiffCheckMarks)
     dispatcher.setAlwaysShowWorktreeList(this.state.alwaysShowWorktreeList)
 
-    dispatcher.setSelectedCopilotModelsByAccount(
-      this.state.selectedCopilotModelsByAccount
-    )
-
-    dispatcher.setAlwaysUseCopilotForConflictResolution(
-      this.state.alwaysUseCopilotForConflictResolution
-    )
+    await this.saveAISettings()
 
     if (enableFormattingPreferences()) {
       if (this.state.selectedDateFormat !== undefined) {
@@ -1217,25 +1024,62 @@ export class Preferences extends React.Component<
     this.props.onDismissed()
   }
 
-  private onTabClicked = (visualIndex: number) => {
-    this.setState({ selectedIndex: this.visualIndexToTab(visualIndex) })
+  private onAISettingsChanged = (aiSettings: IAISettings) => {
+    this.setState(state => ({
+      aiSettings,
+      aiSettingsError: undefined,
+      // Each provider has its own key; a key typed for another one is moot.
+      aiApiKey:
+        state.aiSettings.providerId === aiSettings.providerId
+          ? state.aiApiKey
+          : undefined,
+    }))
   }
 
-  private get isCopilotSdkEnabled(): boolean {
-    return this.props.accounts.some(enableCopilotSdkCommitMessageGeneration)
+  private onAIApiKeyChanged = (aiApiKey: string) => {
+    this.setState({ aiApiKey })
   }
 
-  private tabToVisualIndex(tab: PreferencesTab): number {
-    if (!this.isCopilotSdkEnabled && tab > PreferencesTab.Copilot) {
-      return tab - 1
+  private onTabClicked = (index: number) => {
+    this.setState({ selectedIndex: index })
+  }
+
+  /** Returns a message describing what's wrong with the AI settings, if any. */
+  private validateAISettings(): string | undefined {
+    const { aiSettings } = this.state
+    const preset = getAIProviderPreset(aiSettings.providerId)
+    if (
+      preset?.editableBaseUrl &&
+      (preset.baseUrl === '' || aiSettings.baseUrl) &&
+      !isValidBaseUrl(aiSettings.baseUrl?.trim() ?? '')
+    ) {
+      return 'Enter a valid base URL (https, or http on this computer).'
     }
-    return tab
+
+    return undefined
   }
 
-  private visualIndexToTab(index: number): PreferencesTab {
-    if (!this.isCopilotSdkEnabled && index >= PreferencesTab.Copilot) {
-      return index + 1
+  private async saveAISettings() {
+    const { aiSettings, aiApiKey } = this.state
+    const saved = this.props.aiSettings
+
+    // Nothing configured yet and nothing typed: keep AI unset.
+    if (saved === null && aiSettings.model === '' && aiApiKey === undefined) {
+      return
     }
-    return index
+
+    const unchanged =
+      saved !== null &&
+      aiApiKey === undefined &&
+      saved.providerId === aiSettings.providerId &&
+      saved.model === aiSettings.model &&
+      (saved.baseUrl ?? '') === (aiSettings.baseUrl ?? '')
+
+    if (!unchanged) {
+      await this.props.dispatcher.setAISettings(
+        { ...aiSettings, model: aiSettings.model.trim() },
+        aiApiKey?.trim()
+      )
+    }
   }
 }

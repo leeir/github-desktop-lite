@@ -7,7 +7,9 @@ import { BundleAnalyzerPlugin } from 'webpack-bundle-analyzer'
 
 const config: webpack.Configuration = {
   mode: 'production',
-  devtool: 'source-map',
+  // No source maps in the package: they only make crash stack traces
+  // readable and cost ~15 MB of disk.
+  devtool: false,
 }
 
 const mainConfig = merge({}, common.main, config)

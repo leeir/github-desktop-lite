@@ -9,14 +9,10 @@ import {
   ExternalEditorError,
   suggestedExternalEditor,
 } from '../../../lib/editors/shared'
-import { updateStore } from '../update-store'
 import { enableTestMenuItems } from '../../../lib/feature-flag'
-import { Banner, BannerType } from '../../../models/banner'
+import { BannerType } from '../../../models/banner'
 import { PopupType } from '../../../models/popup'
 import { CloningRepository } from '../../../models/cloning-repository'
-import { generateDevReleaseSummary } from '../../../lib/release-notes'
-import { ReleaseNote } from '../../../models/release-notes'
-import { getVersion } from '../app-proxy'
 import { Emoji } from '../../../lib/emoji'
 import { GitHubRepository } from '../../../models/github-repository'
 import { Account } from '../../../models/account'
@@ -43,16 +39,10 @@ export function showTestUI(
       return boomtown()
     case 'test-app-error':
       return testAppError()
-    case 'test-arm64-banner':
-      return showFakeUpdateBanner({ isArm64: true })
     case 'test-confirm-committing-conflicted-files':
       return showFakeConfirmCommittingConflictedFiles()
     case 'test-cherry-pick-conflicts-banner':
       return showFakeCherryPickConflictBanner()
-    case 'test-copilot-snapshot-card':
-      return dispatcher.showPopup({
-        type: PopupType.TestCopilotSnapshotCard,
-      })
     case 'test-token-expiration':
       return dispatcher.showPopup({
         type: PopupType.TestTokenExpiration,
@@ -101,18 +91,8 @@ export function showTestUI(
         organizationName: 'test-org',
         endpoint: 'test-endpoint',
       })
-    case 'test-release-notes-popup':
-      return showFakeReleaseNotesPopup()
     case 'test-reorder-banner':
       return showFakeReorderBanner()
-    case 'test-send-stats':
-      return dispatcher.sendStats()
-    case 'test-showcase-update-banner':
-      return showFakeUpdateBanner({ isShowcase: true })
-    case 'test-thank-you-banner':
-      return showFakeThankYouBanner()
-    case 'test-thank-you-popup':
-      return showFakeThankYouPopup()
     case 'test-unable-to-locate-git':
       return dispatcher.showPopup({
         type: PopupType.InstallGit,
@@ -158,19 +138,10 @@ export function showTestUI(
         certificate: mockCert,
         url: `https://www.github.com`,
       })
-    case 'test-update-banner':
-      return showFakeUpdateBanner({})
-    case 'test-prioritized-update-banner':
-      return showFakeUpdateBanner({
-        isPriority: true,
-        priorityInfoUrl: 'https://desktop.github.com',
-      })
     case 'test-update-existing-git-lfs-filters':
       return dispatcher.showPopup({ type: PopupType.LFSAttributeMismatch })
     case 'test-upstream-already-exists':
       return showFakeUpstreamAlreadyExists()
-    case 'test-about-dialog':
-      return dispatcher.showPopup({ type: PopupType.TestAbout })
     case 'test-cli-action':
       return dispatcher.showPopup({ type: PopupType.TestCLIAction })
     default:
@@ -189,28 +160,6 @@ export function showTestUI(
         'Test Error - to use default error handler' + crypto.randomUUID()
       )
     )
-  }
-
-  function showFakeUpdateBanner(options: {
-    isArm64?: boolean
-    isShowcase?: boolean
-    isPriority?: boolean
-    priorityInfoUrl?: string
-  }) {
-    updateStore.setIsx64ToARM64ImmediateAutoUpdate(options.isArm64 === true)
-
-    if (options.isShowcase) {
-      dispatcher.setUpdateShowCaseVisibility(true)
-      return
-    }
-
-    if (options.isPriority !== undefined) {
-      updateStore.setPrioritizeUpdate(options.isPriority)
-    }
-
-    updateStore.setPrioritizeUpdateInfoUrl(options.priorityInfoUrl)
-
-    dispatcher.setUpdateBannerVisibility(true)
   }
 
   function showFakeConfirmCommittingConflictedFiles() {
@@ -395,13 +344,6 @@ export function showTestUI(
     })
   }
 
-  async function showFakeReleaseNotesPopup() {
-    dispatcher.showPopup({
-      type: PopupType.ReleaseNotes,
-      newReleases: await generateDevReleaseSummary(),
-    })
-  }
-
   function showFakeReorderBanner() {
     dispatcher.setBanner({
       type: BannerType.SuccessfulReorder,
@@ -412,51 +354,6 @@ export function showTestUI(
           commitsCount: 1,
         })
       },
-    })
-  }
-
-  function showFakeThankYouBanner() {
-    const userContributions: ReadonlyArray<ReleaseNote> = [
-      {
-        kind: 'fixed',
-        message: 'A totally awesome fix that fixes something - #123. Thanks!',
-      },
-      {
-        kind: 'added',
-        message:
-          'You can now do this new thing that was added here - #456. Thanks!',
-      },
-    ]
-
-    const banner: Banner = {
-      type: BannerType.OpenThankYouCard,
-      // Grab emoji's by reference because we could still be loading emoji's
-      emoji,
-      onOpenCard: () =>
-        dispatcher.showPopup({
-          type: PopupType.ThankYou,
-          userContributions,
-          friendlyName: 'Test User',
-          latestVersion: getVersion(),
-        }),
-      onThrowCardAway: () => {
-        console.log('Thrown away :(....')
-      },
-    }
-    dispatcher.setBanner(banner)
-  }
-
-  function showFakeThankYouPopup() {
-    dispatcher.showPopup({
-      type: PopupType.ThankYou,
-      userContributions: [
-        {
-          kind: 'new',
-          message: '[New] Added fake thank you dialog',
-        },
-      ],
-      friendlyName: 'kind contributor',
-      latestVersion: '3.0.0',
     })
   }
 

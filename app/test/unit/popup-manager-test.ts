@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
 import { PopupManager } from '../../src/lib/popup-manager'
-import { Account } from '../../src/models/account'
 import { Popup, PopupType } from '../../src/models/popup'
 
 describe('PopupManager', () => {
@@ -179,56 +178,28 @@ describe('PopupManager', () => {
 
   describe('updatePopup', () => {
     it('updates the given popup', () => {
-      const mockAccount = new Account(
-        'test',
-        '',
-        'deadbeef',
-        [],
-        '',
-        1,
-        '',
-        'free'
-      )
-      const popupTutorial: Popup = {
-        type: PopupType.CreateTutorialRepository,
-        account: mockAccount,
-      }
-
       const popupManager = new PopupManager()
-      const tutorialPopup = popupManager.addPopup(popupTutorial)
+      const errorPopup = popupManager.addPopup({
+        type: PopupType.Error,
+        error: new Error('first'),
+      })
 
-      // Just so update spreader notation will work
-      if (tutorialPopup.type !== PopupType.CreateTutorialRepository) {
+      if (errorPopup.type !== PopupType.Error) {
         return
       }
 
-      const updatedPopup: Popup = {
-        ...tutorialPopup,
-        progress: {
-          kind: 'generic',
-          value: 5,
-        },
-      }
-      popupManager.updatePopup(updatedPopup)
+      popupManager.updatePopup({ ...errorPopup, error: new Error('second') })
 
-      const result = popupManager.getPopupsOfType(
-        PopupType.CreateTutorialRepository
-      )
+      const result = popupManager.getPopupsOfType(PopupType.Error)
       assert.equal(result.length, 1)
       const resultingPopup = result.at(0)
-      // Would fail first expect if not
-      if (resultingPopup === undefined) {
+      assert.equal(resultingPopup?.type, PopupType.Error)
+      if (resultingPopup?.type !== PopupType.Error) {
         return
       }
 
-      assert.equal(resultingPopup.type, PopupType.CreateTutorialRepository)
-      if (resultingPopup.type !== PopupType.CreateTutorialRepository) {
-        return
-      }
-
-      assert.notEqual(resultingPopup.progress, undefined)
-      assert.equal(resultingPopup.progress?.kind, 'generic')
-      assert.equal(resultingPopup.progress?.value, 5)
+      assert.equal(resultingPopup.error.message, 'second')
+      assert.equal(resultingPopup.id, errorPopup.id)
     })
   })
 

@@ -206,12 +206,6 @@ interface IFilterChangesListProps {
 
   readonly isShowingStashEntry: boolean
 
-  /**
-   * Whether we should show the onboarding tutorial nudge
-   * arrow pointing at the commit summary box
-   */
-  readonly shouldNudgeToCommit: boolean
-
   readonly commitSpellcheckEnabled: boolean
 
   readonly showCommitLengthWarning: boolean
@@ -990,7 +984,6 @@ export class FilterChangesList extends React.Component<
         repoRulesInfo={currentRepoRulesInfo}
         aheadBehind={this.props.aheadBehind}
         showNoWriteAccess={fileCount > 0 && !hasWritePermissionForRepository}
-        shouldNudge={this.props.shouldNudgeToCommit}
         commitSpellcheckEnabled={this.props.commitSpellcheckEnabled}
         showCommitLengthWarning={this.props.showCommitLengthWarning}
         onCoAuthorsUpdated={this.onCoAuthorsUpdated}

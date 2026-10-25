@@ -66,7 +66,7 @@ import { updateLicenseDump } from './licenses/update-license-dump'
 import { verifyInjectedSassVariables } from './validate-sass/validate-all'
 import { join } from 'path'
 import assert from 'assert'
-import { copyCopilotDependency } from './copilot'
+import { readdir, readlink, symlink, unlink } from 'fs/promises'
 
 const isPublishableBuild = isPublishable()
 const isDevelopmentBuild = getChannel() === 'development'
@@ -142,6 +142,62 @@ verifyInjectedSassVariables(outRoot)
     console.log(`Built to ${appPaths}`)
   })
 
+/**
+ * dugite bundles Git Credential Manager, a ~120 MB .NET app (its runtime
+ * libraries, translations and helpers sit next to git's own binaries). Lite
+ * handles credentials itself and has no setting that uses it, so drop it.
+ * git's own files all start with `git`, plus `scalar` and `mergetools`.
+ */
+function removeGitCredentialManager(gitCoreDir: string) {
+  if (!existsSync(gitCoreDir)) {
+    return
+  }
+
+  for (const entry of readdirSync(gitCoreDir)) {
+    const isGitFile =
+      (entry.startsWith('git') &&
+        !entry.startsWith('git-credential-manager')) ||
+      entry === 'scalar' ||
+      entry === 'mergetools'
+
+    if (!isGitFile) {
+      rmSync(path.join(gitCoreDir, entry), { recursive: true, force: true })
+    }
+  }
+}
+
+/**
+ * When copying `out` into the bundle, fs.cp turns relative symlinks into
+ * absolute ones pointing back into `out`. Point them at their counterparts
+ * inside the bundle again so the app works wherever it's installed.
+ */
+async function relativizeSymlinks({ buildPath }: { buildPath: string }) {
+  const walk = async (dir: string): Promise<void> => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const entryPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        await walk(entryPath)
+        continue
+      }
+      if (!entry.isSymbolicLink()) {
+        continue
+      }
+
+      const target = await readlink(entryPath)
+      if (path.isAbsolute(target) && target.startsWith(outRoot + path.sep)) {
+        const bundledTarget = path.join(
+          buildPath,
+          path.relative(outRoot, target)
+        )
+        await unlink(entryPath)
+        await symlink(path.relative(dir, bundledTarget), entryPath)
+      }
+    }
+  }
+
+  await walk(buildPath)
+}
+
 async function packageApp() {
   const packagerModuleName = '@electron/packager'
   const { packager }: IDesktopPackagerModule = await import(packagerModuleName)
@@ -213,7 +269,10 @@ async function packageApp() {
     dir: outRoot,
     overwrite: true,
     tmpdir: false,
-    derefSymlinks: true,
+    // Keep dugite's git-core symlinks (git-add -> git, ...) as symlinks.
+    // Dereferencing them copies the 3.5 MB git binary ~145 times (~500 MB).
+    derefSymlinks: false,
+    afterCopy: [relativizeSymlinks],
     prune: false, // We'll prune them ourselves below.
     ignore: [
       new RegExp('/node_modules/electron($|/)'),
@@ -370,14 +429,6 @@ function copyDependencies() {
     { recursive: true, verbatimSymlinks: true }
   )
 
-  console.log('  Copying copilot…')
-  copyCopilotDependency(
-    path.join(projectRoot, 'app', 'node_modules'),
-    path.join(outRoot, 'copilot'),
-    process.platform,
-    getDistArchitecture()
-  )
-
   // Dev builds for macOS require a SSH wrapper to use SSH_ASKPASS
   if (process.platform === 'darwin' && isDevelopmentBuild) {
     console.log('  Copying ssh-wrapper')
@@ -401,6 +452,7 @@ function copyDependencies() {
     recursive: true,
     verbatimSymlinks: true,
   })
+  removeGitCredentialManager(path.join(gitDir, 'libexec', 'git-core'))
 
   console.log('  Copying desktop credential helper…')
   const mingw = getDistArchitecture() === 'x64' ? 'ucrt64' : 'clangarm64'

@@ -1,9 +1,7 @@
 import * as Path from 'path'
-import { writeFile } from 'fs/promises'
 import {
   AccountsStore,
   CloningRepositoriesStore,
-  CopilotStore,
   GitHubUserStore,
   GitStore,
   IssuesStore,
@@ -13,38 +11,15 @@ import {
   SignInStore,
   UpstreamRemoteName,
 } from '.'
-import type {
-  CopilotFeature,
-  CopilotModelSelections,
-  CopilotModelSelectionsByAccount,
-  CopilotModelsByAccount,
-  CopilotQuotaSnapshots,
-  CopilotQuotaSnapshotsByAccount,
-} from './copilot-store'
+import { CommitMessageGenerationCancelledError } from '../ai/commit-prompt'
+import { generateCommitMessage } from '../ai/commit-message'
 import {
-  CommitMessageGenerationCancelledError,
-  getCopilotAccountCacheKey,
-  migrateCopilotModelSelectionsToAccounts,
-} from './copilot-store'
-import {
-  IBYOKProvider,
-  loadBYOKProviders,
-  saveBYOKProviders,
-  setBYOKSecret,
-  deleteBYOKSecret,
-  getBYOKSecret,
-  parseModelKey,
-} from '../copilot/byok'
-import { getConflictResolutionModelDisplay } from '../copilot/conflict-resolution-model'
-import type {
-  CopilotModelRequest,
-  CopilotProviderConfig,
-} from './copilot-store'
-import {
-  Account,
-  CopilotLicenseTypeNoAccess,
-  isDotComAccount,
-} from '../../models/account'
+  IAISettings,
+  loadAISettings,
+  saveAISettings,
+  setAIProviderKey,
+} from '../ai/providers'
+import { Account, isDotComAccount } from '../../models/account'
 import { AppMenu, IMenu } from '../../models/app-menu'
 import { Author } from '../../models/author'
 import { Branch, BranchType, IAheadBehind } from '../../models/branch'
@@ -97,8 +72,6 @@ import {
   WorkingDirectoryFileChange,
   WorkingDirectoryStatus,
   AppFileStatusKind,
-  isConflictedFileStatus,
-  GitStatusEntry,
 } from '../../models/status'
 import { TipState, tipEquals, IValidBranch } from '../../models/tip'
 import {
@@ -129,9 +102,6 @@ import {
   updatePreferredAppMenuItemLabels,
   updateAccounts,
   setWindowZoomFactor,
-  onShowInstallingUpdate,
-  sendWillQuitEvenIfUpdatingSync,
-  quitApp,
   sendCancelQuittingSync,
   showOpenDialog,
 } from '../../ui/main-process-proxy'
@@ -168,7 +138,6 @@ import {
   IFileListFilterState,
   isMergeConflictState,
   IMultiCommitOperationState,
-  ConflictState,
   IConstrainedValue,
   ICompareState,
   CommitOptions,
@@ -182,11 +151,7 @@ import {
 import { assertNever, fatalError, forceUnwrap } from '../fatal-error'
 
 import { formatCommitMessage } from '../format-commit-message'
-import {
-  getAccountForCommitMessageGeneration,
-  getAccountForCopilotConflictResolution,
-  getAccountForRepository,
-} from '../get-account-for-repository'
+import { getAccountForRepository } from '../get-account-for-repository'
 import {
   abortMerge,
   addRemote,
@@ -242,7 +207,6 @@ import {
   getFilesDiffText,
   TerminalOutput,
   HookProgress,
-  git,
 } from '../git'
 import {
   installGlobalLFSFilters,
@@ -268,7 +232,7 @@ import {
   parse as parseShell,
   Shell,
 } from '../shells'
-import { ILaunchStats, StatsStore } from '../stats'
+import { StatsStore } from '../stats'
 import { hasShownWelcomeFlow, markWelcomeFlowComplete } from '../welcome'
 import { WindowState } from '../window-state'
 import { TypedBaseStore } from './base-store'
@@ -293,11 +257,6 @@ import {
   getFloatNumber,
 } from '../local-storage'
 import { ExternalEditorError, suggestedExternalEditor } from '../editors/shared'
-import {
-  CopilotAppError,
-  findCopilotApp,
-  openInCopilotApp,
-} from '../copilot-app'
 import { ApiRepositoriesStore } from './api-repositories-store'
 import {
   updateChangedFiles,
@@ -306,14 +265,8 @@ import {
 } from './updates/changes-state'
 import { ManualConflictResolution } from '../../models/manual-conflict-resolution'
 import { BranchPruner } from './helpers/branch-pruner'
-import {
-  enableCopilotConflictResolution,
-  enableCopilotAppHandoff,
-  enableCopilotSdkCommitMessageGeneration,
-  enableCustomIntegration,
-  enableWorktreeSupport,
-} from '../feature-flag'
-import { isGHES } from '../endpoint-capabilities'
+import { enableCustomIntegration, enableWorktreeSupport } from '../feature-flag'
+import { PreferencesTab } from '../../models/preferences'
 import { Banner, BannerType } from '../../models/banner'
 import { ComputedAction } from '../../models/computed-action'
 import {
@@ -332,30 +285,14 @@ import { arrayEquals } from '../equality'
 import { MenuLabelsEvent } from '../../models/menu-labels'
 import { findRemoteBranchName } from './helpers/find-branch-name'
 import { updateRemoteUrl } from './updates/update-remote-url'
-import {
-  TutorialStep,
-  orderedTutorialSteps,
-  isValidTutorialStep,
-} from '../../models/tutorial-step'
-import { OnboardingTutorialAssessor } from './helpers/tutorial-assessor'
-import {
-  getConflictedFiles,
-  getUntrackedFiles,
-  hasUnresolvedConflicts,
-} from '../status'
+import { getUntrackedFiles } from '../status'
 import { isBranchPushable } from '../helpers/push-control'
 import {
   findAssociatedPullRequest,
   isPullRequestAssociatedWithBranch,
 } from '../helpers/pull-request-matching'
 import { parseRemote } from '../../lib/remote-parsing'
-import { createTutorialRepository } from './helpers/create-tutorial-repository'
 import { sendNonFatalException } from '../helpers/non-fatal-exception'
-import {
-  CopilotConflictResolutionError,
-  CopilotConflictResolutionFailureStage,
-} from '../copilot-conflict-resolution-error'
-import { getDefaultDir } from '../../ui/lib/default-dir'
 import { WorkflowPreferences } from '../../models/workflow-preferences'
 import { RepositoryIndicatorUpdater } from './helpers/repository-indicator-updater'
 import { isAttributableEmailFor } from '../email'
@@ -380,7 +317,6 @@ import {
   isCherryPickHeadFound,
 } from '../git/cherry-pick'
 import { DragElement } from '../../models/drag-drop'
-import { ILastThankYou } from '../../models/last-thank-you'
 import { squash } from '../git/squash'
 import { getTipSha } from '../tip'
 import {
@@ -410,55 +346,26 @@ import { resizableComponentClass } from '../../ui/resizable'
 import { compare } from '../compare'
 import { parseRepoRules, useRepoRulesLogic } from '../helpers/repo-rules'
 import { RepoRulesInfo } from '../../models/repo-rules'
-import {
-  setUseExternalCredentialHelper,
-  useExternalCredentialHelper,
-  useExternalCredentialHelperDefault,
-} from '../trampoline/use-external-credential-helper'
 import { IOAuthAction } from '../parse-app-url'
 import {
   ICustomIntegration,
   migratedCustomIntegration,
 } from '../custom-integration'
-import { updateStore } from '../../ui/lib/update-store'
-import { startTimer } from '../../ui/lib/timing'
 import { BypassReasonType } from '../../ui/secret-scanning/bypass-push-protection-dialog'
-import {
-  selectReferencedContext,
-  fallbackReferencedContext,
-  IConflictResolutionProgress,
-  ICopilotResolutionSummary,
-  IFileResolution,
-  ICopilotSkippedFile,
-} from '../copilot-conflict-resolution'
-import {
-  buildConflictContext,
-  gatherCommitContext,
-  IConflictContextCommit,
-  IConflictContextPullRequest,
-  IConflictResolutionContext,
-} from '../copilot-conflict-context'
-import {
-  extractPullRequestNumbersFromCommits,
-  findPullRequestsByNumbers,
-} from '../pull-request-refs'
-import { resolveWithin } from '../path'
 import {
   IDeferredCheckout,
   IDeleteWorktreeOptions,
   WorktreeEntry,
 } from '../../models/worktree'
 import { shouldShowWorktreeDropdown } from '../worktree-dropdown'
-import type { Model } from '../copilot/types'
 
 const LastSelectedRepositoryIDKey = 'last-selected-repository-id'
 
 /**
- * Upper bound on how many pull requests we'll resolve (across both sides)
- * when gathering Copilot conflict-resolution context. Caps best-effort API
- * lookups so a noisy set of `#NNNN` references can't stall resolution.
+ * How long a repository may stay unselected before the commits and diffs
+ * loaded for it are dropped. They are loaded again when it's selected.
  */
-const MaxPullRequestLookups = 10
+const InactiveRepositoryTrimDelay = 5 * 60 * 1000
 
 const RecentRepositoriesKey = 'recently-selected-repositories'
 /**
@@ -552,13 +459,11 @@ const InitialRepositoryIndicatorTimeout = 2 * 60 * 1000
 
 const MaxInvalidFoldersToDisplay = 3
 
-const lastThankYouKey = 'version-and-users-of-last-thank-you'
 const pullRequestSuggestedNextActionKey =
   'pull-request-suggested-next-action-key'
 
 export const useCustomEditorKey = 'use-custom-editor'
 const customEditorKey = 'custom-editor'
-const copilotAppPathKey = 'copilot-app-path'
 
 export const useCustomShellKey = 'use-custom-shell'
 const customShellKey = 'custom-shell'
@@ -571,27 +476,11 @@ export const showDiffCheckMarksKey = 'diff-check-marks-visible'
 
 const alwaysShowWorktreeListKey = 'always-show-worktree-list'
 
-const commitMessageGenerationDisclaimerLastSeenKey =
-  'commit-message-generation-disclaimer-last-seen'
-
 const commitMessageGenerationButtonClickedKey =
   'commit-message-generation-button-clicked'
 
-const copilotConflictResolutionDisclaimerLastSeenKey =
-  'copilot-conflict-resolution-disclaimer-last-seen'
-
-const copilotConflictResolutionClickCountKey =
-  'copilot-conflict-resolution-button-clicked'
-
-const alwaysUseCopilotForConflictResolutionKey =
-  'always-use-copilot-for-conflict-resolution'
-
 export const showChangesFilterKey = 'show-changes-filter'
 
-// TODO: to be removed after the migration period. Now Copilot models are stored
-// per account, not globally.
-const selectedCopilotModelsKey = 'selected-copilot-models'
-const selectedCopilotModelsByAccountKey = 'selected-copilot-models-by-account'
 export const showChangesFilterDefault = true
 
 export class AppStore extends TypedBaseStore<IAppState> {
@@ -654,13 +543,9 @@ export class AppStore extends TypedBaseStore<IAppState> {
   private windowState: WindowState | null = null
   private windowZoomFactor: number = 1
   private resizablePaneActive = false
-  private isUpdateAvailableBannerVisible: boolean = false
-  private isUpdateShowcaseVisible: boolean = false
 
   private askToMoveToApplicationsFolderSetting: boolean =
     askToMoveToApplicationsFolderDefault
-  private useExternalCredentialHelper: boolean =
-    useExternalCredentialHelperDefault
   private askForConfirmationOnRepositoryRemoval: boolean =
     confirmRepoRemovalDefault
   private confirmDiscardChanges: boolean = confirmDiscardChangesDefault
@@ -720,16 +605,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
   private repositoryIndicatorsEnabled: boolean
 
-  /** Which step the user needs to complete next in the onboarding tutorial */
-  private currentOnboardingTutorialStep = TutorialStep.NotApplicable
-  private readonly tutorialAssessor: OnboardingTutorialAssessor
-
   private currentDragElement: DragElement | null = null
-  private lastThankYou: ILastThankYou | undefined
 
   private useCustomEditor: boolean = false
   private customEditor: ICustomIntegration | null = null
-  private copilotAppPath: string | null = null
 
   private useCustomShell: boolean = false
   private customShell: ICustomIntegration | null = null
@@ -752,22 +631,15 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
   private underlineLinks: boolean = underlineLinksDefault
 
-  private commitMessageGenerationDisclaimerLastSeen: number | null = null
   private commitMessageGenerationButtonClicked: boolean = false
 
-  private copilotConflictResolutionDisclaimerLastSeen: number | null = null
-  private copilotConflictResolutionClickCount: number = 0
+  /** The model provider and model used to generate commit messages. */
+  private aiSettings: IAISettings | null = null
 
-  private alwaysUseCopilotForConflictResolution: boolean = false
+  /** Pending cache trims for repositories that were switched away from. */
+  private readonly inactiveRepositoryTrims = new Map<number, number>()
 
   private showChangesFilter: boolean = false
-
-  private selectedCopilotModelsByAccount: CopilotModelSelectionsByAccount =
-    new Map()
-  private copilotModelsByAccount: CopilotModelsByAccount = new Map()
-  private copilotQuotaSnapshotsByAccount: CopilotQuotaSnapshotsByAccount =
-    new Map()
-  private byokProviders: ReadonlyArray<IBYOKProvider> = []
 
   public constructor(
     private readonly gitHubUserStore: GitHubUserStore,
@@ -780,8 +652,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
     private readonly pullRequestCoordinator: PullRequestCoordinator,
     private readonly repositoryStateCache: RepositoryStateCache,
     private readonly apiRepositoriesStore: ApiRepositoriesStore,
-    private readonly notificationsStore: NotificationsStore,
-    private readonly copilotStore: CopilotStore
+    private readonly notificationsStore: NotificationsStore
   ) {
     super()
 
@@ -816,9 +687,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     this.wireupIpcEventHandlers()
     this.wireupStoreEventHandlers()
     getAppMenu()
-    this.tutorialAssessor = new OnboardingTutorialAssessor(
-      this.getResolvedExternalEditor
-    )
 
     // We're considering flipping the default value and have new users
     // start off with repository indicators disabled. As such we'll start
@@ -854,8 +722,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     this.notificationsStore.onPullRequestCommentNotification(
       this.onPullRequestCommentNotification
     )
-
-    onShowInstallingUpdate(this.onShowInstallingUpdate)
   }
 
   private initializeWindowState = async () => {
@@ -903,99 +769,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     return zoomFactor
   }
 
-  private onShowInstallingUpdate = () => {
-    this._showPopup({
-      type: PopupType.InstallingUpdate,
-    })
-  }
-
-  /** Figure out what step of the tutorial the user needs to do next */
-  private async updateCurrentTutorialStep(
-    repository: Repository
-  ): Promise<void> {
-    const currentStep = await this.tutorialAssessor.getCurrentStep(
-      repository.isTutorialRepository,
-      this.repositoryStateCache.get(repository)
-    )
-    // only emit an update if its changed
-    if (currentStep !== this.currentOnboardingTutorialStep) {
-      this.currentOnboardingTutorialStep = currentStep
-      log.info(`Current tutorial step is now ${currentStep}`)
-      this.recordTutorialStepCompleted(currentStep)
-      this.emitUpdate()
-    }
-  }
-
-  private recordTutorialStepCompleted(step: TutorialStep): void {
-    if (!isValidTutorialStep(step)) {
-      return
-    }
-
-    this.statsStore.recordHighestTutorialStepCompleted(
-      orderedTutorialSteps.indexOf(step)
-    )
-
-    switch (step) {
-      case TutorialStep.PickEditor:
-        // don't need to record anything for the first step
-        break
-      case TutorialStep.CreateBranch:
-        this.statsStore.recordTutorialEditorInstalled()
-        break
-      case TutorialStep.EditFile:
-        this.statsStore.recordTutorialBranchCreated()
-        break
-      case TutorialStep.MakeCommit:
-        this.statsStore.recordTutorialFileEdited()
-        break
-      case TutorialStep.PushBranch:
-        this.statsStore.recordTutorialCommitCreated()
-        break
-      case TutorialStep.OpenPullRequest:
-        this.statsStore.recordTutorialBranchPushed()
-        break
-      case TutorialStep.AllDone:
-        this.statsStore.recordTutorialPrCreated()
-        this.statsStore.recordTutorialCompleted()
-        break
-      case TutorialStep.Announced:
-        // don't need to record anything for announcment
-        break
-      default:
-        assertNever(step, 'Unaccounted for step type')
-    }
-  }
-
-  public async _resumeTutorial(repository: Repository) {
-    this.tutorialAssessor.resumeTutorial()
-    await this.updateCurrentTutorialStep(repository)
-  }
-
-  public async _pauseTutorial(repository: Repository) {
-    this.tutorialAssessor.pauseTutorial()
-    await this.updateCurrentTutorialStep(repository)
-  }
-
-  /** Call via `Dispatcher` when the user opts to skip the pick editor step of the onboarding tutorial */
-  public async _skipPickEditorTutorialStep(repository: Repository) {
-    this.tutorialAssessor.skipPickEditor()
-    await this.updateCurrentTutorialStep(repository)
-  }
-
-  /**
-   * Call  via `Dispatcher` when the user has either created a pull request or opts to
-   * skip the create pull request step of the onboarding tutorial
-   */
-  public async _markPullRequestTutorialStepAsComplete(repository: Repository) {
-    this.tutorialAssessor.markPullRequestTutorialStepAsComplete()
-    await this.updateCurrentTutorialStep(repository)
-  }
-
-  public async _markTutorialCompletionAsAnnounced(repository: Repository) {
-    this.tutorialAssessor.markTutorialCompletionAsAnnounced()
-    await this.updateCurrentTutorialStep(repository)
-  }
-
   private wireupIpcEventHandlers() {
     ipcRenderer.on('window-state-changed', (_, windowState) => {
       this.windowState = windowState
@@ -1031,10 +804,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
       this.statsStore.setUsesShortLivedToken(
         accounts.some(account => this.accountsStore.isRefreshable(account))
       )
-      this.syncCopilotModelsFromCache()
-      this.syncCopilotQuotaSnapshotsFromCache()
-      this.updateCopilotModelsForCurrentAccount()
-      this.updateCopilotQuotaSnapshotsForCurrentAccount()
       const endpointTokens = accounts.map<EndpointToken>(
         ({ endpoint, token }) => ({ endpoint, token })
       )
@@ -1075,101 +844,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
     this.apiRepositoriesStore.onDidUpdate(() => this.emitUpdate())
     this.apiRepositoriesStore.onDidError(error => this.emitError(error))
-
-    // updateStore is a global, App.tsx handles most of it but we carry the
-    // UpdateState in the AppState so we need to emit whenever it updates.
-    updateStore.onDidChange(() => this.emitUpdate())
-
-    this.copilotStore.onDidUpdate(() => {
-      this.syncCopilotModelsFromCache()
-      this.syncCopilotQuotaSnapshotsFromCache()
-      this.emitUpdate()
-    })
-  }
-
-  private getCopilotSettingsAccounts(): ReadonlyArray<Account> {
-    return this.accounts.filter(
-      account =>
-        !isGHES(account.endpoint) &&
-        enableCopilotSdkCommitMessageGeneration(account) &&
-        account.isCopilotDesktopEnabled === true &&
-        account.copilotLicenseType !== undefined &&
-        account.copilotLicenseType !== CopilotLicenseTypeNoAccess
-    )
-  }
-
-  private syncCopilotModelsFromCache(): void {
-    const accounts = this.getCopilotSettingsAccounts()
-    const copilotModelsByAccount = new Map<
-      string,
-      ReadonlyArray<Model> | null
-    >()
-
-    for (const account of accounts) {
-      copilotModelsByAccount.set(
-        getCopilotAccountCacheKey(account),
-        this.copilotStore.getCachedModelList(account)
-      )
-    }
-
-    this.copilotModelsByAccount = copilotModelsByAccount
-  }
-
-  private syncCopilotQuotaSnapshotsFromCache(): void {
-    const accounts = this.getCopilotSettingsAccounts()
-    const copilotQuotaSnapshotsByAccount = new Map<
-      string,
-      CopilotQuotaSnapshots | null
-    >()
-
-    for (const account of accounts) {
-      copilotQuotaSnapshotsByAccount.set(
-        getCopilotAccountCacheKey(account),
-        this.copilotStore.getCachedQuotaSnapshots(account)
-      )
-    }
-
-    this.copilotQuotaSnapshotsByAccount = copilotQuotaSnapshotsByAccount
-  }
-
-  private updateCopilotModelsForCurrentAccount(): void {
-    const accounts = this.getCopilotSettingsAccounts()
-
-    if (
-      accounts.length === 0 ||
-      accounts.every(
-        account => this.copilotStore.getCachedModelList(account) !== null
-      )
-    ) {
-      return
-    }
-
-    this.fetchCopilotModelsForCurrentAccounts().catch(e => {
-      log.warn(
-        'AppStore: Failed to fetch Copilot models after account update',
-        e
-      )
-    })
-  }
-
-  private updateCopilotQuotaSnapshotsForCurrentAccount(): void {
-    const accounts = this.getCopilotSettingsAccounts()
-
-    if (
-      accounts.length === 0 ||
-      accounts.every(
-        account => this.copilotStore.getCachedQuotaSnapshots(account) !== null
-      )
-    ) {
-      return
-    }
-
-    this.fetchCopilotQuotaSnapshotsForCurrentAccounts().catch(e => {
-      log.warn(
-        'AppStore: Failed to fetch Copilot quota snapshots after account update',
-        e
-      )
-    })
   }
 
   /** Load the emoji from disk. */
@@ -1293,12 +967,9 @@ export class AppStore extends TypedBaseStore<IAppState> {
       pullRequestFilesListWidth: this.pullRequestFileListWidth,
       appMenuState: this.appMenu ? this.appMenu.openMenus : [],
       highlightAccessKeys: this.highlightAccessKeys,
-      isUpdateAvailableBannerVisible: this.isUpdateAvailableBannerVisible,
-      isUpdateShowcaseVisible: this.isUpdateShowcaseVisible,
       currentBanner: this.currentBanner,
       askToMoveToApplicationsFolderSetting:
         this.askToMoveToApplicationsFolderSetting,
-      useExternalCredentialHelper: this.useExternalCredentialHelper,
       askForConfirmationOnRepositoryRemoval:
         this.askForConfirmationOnRepositoryRemoval,
       askForConfirmationOnDiscardChanges: this.confirmDiscardChanges,
@@ -1331,17 +1002,13 @@ export class AppStore extends TypedBaseStore<IAppState> {
       apiRepositories: this.apiRepositoriesStore.getState(),
       useWindowsOpenSSH: this.useWindowsOpenSSH,
       showCommitLengthWarning: this.showCommitLengthWarning,
-      optOutOfUsageTracking: this.statsStore.getOptOut(),
-      currentOnboardingTutorialStep: this.currentOnboardingTutorialStep,
       repositoryIndicatorsEnabled: this.repositoryIndicatorsEnabled,
       commitSpellcheckEnabled: this.commitSpellcheckEnabled,
       currentDragElement: this.currentDragElement,
-      lastThankYou: this.lastThankYou,
       useCustomEditor: this.useCustomEditor,
       customEditor: this.customEditor,
       useCustomShell: this.useCustomShell,
       customShell: this.customShell,
-      copilotAppPath: this.copilotAppPath,
       showCIStatusPopover: this.showCIStatusPopover,
       notificationsEnabled: getNotificationsEnabled(),
       pullRequestSuggestedNextAction: this.pullRequestSuggestedNextAction,
@@ -1351,22 +1018,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
       showDiffCheckMarks: this.showDiffCheckMarks,
       alwaysShowWorktreeList: this.alwaysShowWorktreeList,
       preferAbsoluteDates: this.preferAbsoluteDates,
-      updateState: updateStore.state,
-      commitMessageGenerationDisclaimerLastSeen:
-        this.commitMessageGenerationDisclaimerLastSeen,
       commitMessageGenerationButtonClicked:
         this.commitMessageGenerationButtonClicked,
-      copilotConflictResolutionDisclaimerLastSeen:
-        this.copilotConflictResolutionDisclaimerLastSeen,
-      copilotConflictResolutionClickCount:
-        this.copilotConflictResolutionClickCount,
-      alwaysUseCopilotForConflictResolution:
-        this.alwaysUseCopilotForConflictResolution,
       showChangesFilter: this.showChangesFilter,
-      selectedCopilotModelsByAccount: this.selectedCopilotModelsByAccount,
-      copilotModelsByAccount: this.copilotModelsByAccount,
-      copilotQuotaSnapshotsByAccount: this.copilotQuotaSnapshotsByAccount,
-      byokProviders: this.byokProviders,
+      aiSettings: this.aiSettings,
     }
   }
 
@@ -2134,19 +1789,17 @@ export class AppStore extends TypedBaseStore<IAppState> {
   ): Promise<Repository | null> {
     const previouslySelectedRepository = this.selectedRepository
 
-    // do this quick check to see if we have a tutorial repository
-    // cause if its not we can quickly hide the tutorial pane
-    // in the first `emitUpdate` below
-    const previouslyInTutorial =
-      this.currentOnboardingTutorialStep !== TutorialStep.NotApplicable
-    if (
-      previouslyInTutorial &&
-      (!(repository instanceof Repository) || !repository.isTutorialRepository)
-    ) {
-      this.currentOnboardingTutorialStep = TutorialStep.NotApplicable
-    }
-
     this.selectedRepository = repository
+
+    if (repository instanceof Repository) {
+      this.cancelInactiveRepositoryTrim(repository)
+    }
+    if (
+      previouslySelectedRepository instanceof Repository &&
+      previouslySelectedRepository.id !== repository?.id
+    ) {
+      this.scheduleInactiveRepositoryTrim(previouslySelectedRepository)
+    }
 
     this.emitUpdate()
     this.stopBackgroundFetching()
@@ -2191,6 +1844,59 @@ export class AppStore extends TypedBaseStore<IAppState> {
       refreshedRepository,
       previouslySelectedRepository
     )
+  }
+
+  private cancelInactiveRepositoryTrim(repository: Repository) {
+    const handle = this.inactiveRepositoryTrims.get(repository.id)
+    if (handle !== undefined) {
+      window.clearTimeout(handle)
+      this.inactiveRepositoryTrims.delete(repository.id)
+    }
+  }
+
+  private scheduleInactiveRepositoryTrim(repository: Repository) {
+    this.cancelInactiveRepositoryTrim(repository)
+    const handle = window.setTimeout(() => {
+      this.inactiveRepositoryTrims.delete(repository.id)
+      if (this.selectedRepository?.id !== repository.id) {
+        this.trimInactiveRepository(repository)
+      }
+    }, InactiveRepositoryTrimDelay)
+    this.inactiveRepositoryTrims.set(repository.id, handle)
+  }
+
+  /**
+   * Drops the history list, the selected commit's diff and the selected
+   * file's diff of a repository that isn't on screen. Without this every
+   * repository ever opened keeps every commit browsed and its last diff in
+   * memory until the app quits.
+   */
+  private trimInactiveRepository(repository: Repository) {
+    const gitStore = this.gitStoreCache.peek(repository)
+    if (gitStore === undefined) {
+      return
+    }
+
+    gitStore.trimCommitLookup()
+
+    // An empty history makes `_executeCompare` reload it on next view.
+    this.repositoryStateCache.updateCompareState(repository, () => ({
+      formState: { kind: HistoryTabMode.History },
+      tip: null,
+      commitSHAs: [],
+    }))
+    this.repositoryStateCache.updateCommitSelection(repository, () => ({
+      shas: [],
+      shasInDiff: [],
+      isContiguous: true,
+      file: null,
+      changesetData: { files: [], linesAdded: 0, linesDeleted: 0 },
+      diff: null,
+    }))
+    // `_loadStatus` recomputes the selected file's diff on next refresh.
+    this.repositoryStateCache.updateChangesState(repository, state => ({
+      selection: { ...state.selection, diff: null },
+    }))
   }
 
   // update the stored list of recently opened repositories
@@ -2475,8 +2181,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
       askToMoveToApplicationsFolderDefault
     )
 
-    this.useExternalCredentialHelper = useExternalCredentialHelper()
-
     this.askForConfirmationOnRepositoryRemoval = getBoolean(
       confirmRepoRemovalKey,
       confirmRepoRemovalDefault
@@ -2590,13 +2294,9 @@ export class AppStore extends TypedBaseStore<IAppState> {
       this.emitUpdate()
     })
 
-    this.lastThankYou = getObject<ILastThankYou>(lastThankYouKey)
-
     this.useCustomEditor =
       enableCustomIntegration() && getBoolean(useCustomEditorKey, false)
     this.customEditor = getObject<ICustomIntegration>(customEditorKey) ?? null
-    this.copilotAppPath = localStorage.getItem(copilotAppPathKey)
-
     this.useCustomShell =
       enableCustomIntegration() && getBoolean(useCustomShellKey, false)
     this.customShell = getObject<ICustomIntegration>(customShellKey) ?? null
@@ -2629,31 +2329,8 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
     this.preferAbsoluteDates = getPreferAbsoluteDates()
 
-    this.commitMessageGenerationDisclaimerLastSeen =
-      getNumber(commitMessageGenerationDisclaimerLastSeenKey) ?? null
-
     this.commitMessageGenerationButtonClicked = getBoolean(
       commitMessageGenerationButtonClickedKey,
-      false
-    )
-
-    this.copilotConflictResolutionDisclaimerLastSeen =
-      getNumber(copilotConflictResolutionDisclaimerLastSeenKey) ?? null
-
-    // The key was originally a boolean; migrate old `true` values to 1.
-    const rawClickCount = localStorage.getItem(
-      copilotConflictResolutionClickCountKey
-    )
-    if (rawClickCount === 'true' || rawClickCount === '1') {
-      this.copilotConflictResolutionClickCount = 1
-      setNumber(copilotConflictResolutionClickCountKey, 1)
-    } else {
-      this.copilotConflictResolutionClickCount =
-        getNumber(copilotConflictResolutionClickCountKey) ?? 0
-    }
-
-    this.alwaysUseCopilotForConflictResolution = getBoolean(
-      alwaysUseCopilotForConflictResolutionKey,
       false
     )
 
@@ -2662,10 +2339,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       showChangesFilterDefault
     )
 
-    this.selectedCopilotModelsByAccount =
-      this.loadCopilotModelSelectionsByAccount()
-    this.migrateCopilotModelSelections()
-    this.byokProviders = loadBYOKProviders()
+    this.aiSettings = loadAISettings()
 
     this.emitUpdateNow()
 
@@ -2716,22 +2390,13 @@ export class AppStore extends TypedBaseStore<IAppState> {
     // Start with all the available width
     let available = window.innerWidth
 
-    // // The tutorial currently has a fixed-width sidebar which we have to account
-    // // for so it makes sense to limit the width of the file list in order to
-    // // give the tutorial enough space to show its content.
-    const tutorialMinWidth =
-      this.currentOnboardingTutorialStep === TutorialStep.NotApplicable
-        ? 0
-        : 650
-
     // Working our way from left to right (i.e. giving priority to the leftmost
     // pane when we need to constrain the width)
     //
     // 220 was determined as the minimum value since it is the smallest width
     // that will still fit the placeholder text in the branch selector textbox
     // of the history tab
-    const maxSidebarWidth =
-      available - Math.max(toolbarButtonsMinWidth, tutorialMinWidth)
+    const maxSidebarWidth = available - toolbarButtonsMinWidth
     this.sidebarWidth = constrain(this.sidebarWidth, 220, maxSidebarWidth)
 
     // Now calculate the width we have left to distribute for the other panes
@@ -3146,10 +2811,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
 
     const { step, operationDetail } = multiCommitOperationState
-    if (
-      step.kind !== MultiCommitOperationStepKind.ShowConflicts &&
-      step.kind !== MultiCommitOperationStepKind.ShowCopilotConflicts
-    ) {
+    if (step.kind !== MultiCommitOperationStepKind.ShowConflicts) {
       return
     }
 
@@ -3244,58 +2906,15 @@ export class AppStore extends TypedBaseStore<IAppState> {
       theirBranch,
     }
 
-    const useCopilot = multiCommitOperationState.useCopilotConflictResolution
-    const autoRoute =
-      !useCopilot && this.shouldAutoRouteToCopilotConflictResolution(repository)
+    this._setMultiCommitOperationStep(repository, {
+      kind: MultiCommitOperationStepKind.ShowConflicts,
+      conflictState: mcoConflictState,
+    })
 
-    if (autoRoute && this.isCopilotConflictDisclaimerFresh()) {
-      // Global pref is on and disclaimer is fresh — go straight to Copilot.
-      this._setMultiCommitOperationStepWithCopilotResolution(
-        repository,
-        {
-          kind: MultiCommitOperationStepKind.ShowCopilotConflictsLoading,
-          conflictState: mcoConflictState,
-        },
-        true
-      )
-
-      this._showPopup({
-        type: PopupType.MultiCommitOperation,
-        repository,
-      })
-
-      await this._startCopilotConflictResolution(repository)
-    } else if (useCopilot) {
-      this._setMultiCommitOperationStep(repository, {
-        kind: MultiCommitOperationStepKind.ShowCopilotConflictsLoading,
-        conflictState: mcoConflictState,
-      })
-
-      this._showPopup({
-        type: PopupType.MultiCommitOperation,
-        repository,
-      })
-
-      // Auto-route to Copilot: the user previously opted into Copilot
-      // resolution during this operation, so skip the manual dialog.
-      await this._startCopilotConflictResolution(repository)
-    } else {
-      this._setMultiCommitOperationStep(repository, {
-        kind: MultiCommitOperationStepKind.ShowConflicts,
-        conflictState: mcoConflictState,
-      })
-
-      this._showPopup({
-        type: PopupType.MultiCommitOperation,
-        repository,
-      })
-
-      if (autoRoute) {
-        // Global pref is on but disclaimer is stale — show conflicts first
-        // and then trigger the attempt which will show the disclaimer popup.
-        await this._attemptCopilotConflictResolution(repository)
-      }
-    }
+    this._showPopup({
+      type: PopupType.MultiCommitOperation,
+      repository,
+    })
   }
 
   private async getMergeConflictsTheirBranch(
@@ -3804,7 +3423,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       this.statsStore.increment('partialCommits')
     }
 
-    if (context.messageGeneratedByCopilot === true) {
+    if (context.messageGeneratedByAI === true) {
       this.statsStore.increment('generateCommitMessageUsedVerbatimCount')
     }
 
@@ -4148,8 +3767,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     this.updateMenuItemLabels(latestState)
 
     this._initializeCompare(repository)
-
-    this.updateCurrentTutorialStep(repository)
   }
 
   private async updateStashEntryCountMetric(
@@ -6359,15 +5976,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     })
   }
 
-  public _updateCommitMessageGenerationDisclaimerLastSeen(): void {
-    this.commitMessageGenerationDisclaimerLastSeen = Date.now()
-    setNumber(
-      commitMessageGenerationDisclaimerLastSeenKey,
-      this.commitMessageGenerationDisclaimerLastSeen
-    )
-    this.emitUpdate()
-  }
-
   public _setCommitMessageGenerationButtonClicked(): void {
     if (!this.commitMessageGenerationButtonClicked) {
       this.commitMessageGenerationButtonClicked = true
@@ -6376,72 +5984,21 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
   }
 
-  public _updateCopilotConflictResolutionDisclaimerLastSeen(): void {
-    this.copilotConflictResolutionDisclaimerLastSeen = Date.now()
-    setNumber(
-      copilotConflictResolutionDisclaimerLastSeenKey,
-      this.copilotConflictResolutionDisclaimerLastSeen
-    )
-    this.emitUpdate()
-  }
-
-  public _incrementCopilotConflictResolutionClickCount(): void {
-    this.copilotConflictResolutionClickCount++
-    setNumber(
-      copilotConflictResolutionClickCountKey,
-      this.copilotConflictResolutionClickCount
-    )
-    this.emitUpdate()
-  }
-
-  public _setAlwaysUseCopilotForConflictResolution(value: boolean): void {
-    this.alwaysUseCopilotForConflictResolution = value
-    setBoolean(alwaysUseCopilotForConflictResolutionKey, value)
-    this.emitUpdate()
-  }
-
-  private shouldAutoRouteToCopilotConflictResolution(
-    repository: Repository
-  ): boolean {
-    return (
-      this.alwaysUseCopilotForConflictResolution &&
-      enableCopilotConflictResolution() &&
-      getAccountForCopilotConflictResolution(this.accounts, repository) !== null
-    )
-  }
-
-  private isCopilotConflictDisclaimerFresh(): boolean {
-    return (
-      this.copilotConflictResolutionDisclaimerLastSeen !== null &&
-      offsetFromNow(-30, 'days') <=
-        this.copilotConflictResolutionDisclaimerLastSeen
-    )
-  }
-
+  /**
+   * Generates a commit message with the user's own model provider. When no
+   * provider has been set up yet the AI settings are opened instead.
+   */
   public async _generateCommitMessage(
     repository: Repository,
     filesSelected: ReadonlyArray<WorkingDirectoryFileChange>
   ): Promise<boolean> {
-    const account = getAccountForCommitMessageGeneration(
-      this.accounts,
-      repository
-    )
-
-    if (!account) {
-      return false
-    }
-
     this._setCommitMessageGenerationButtonClicked()
 
-    if (
-      !this.commitMessageGenerationDisclaimerLastSeen ||
-      offsetFromNow(-30, 'days') >
-        this.commitMessageGenerationDisclaimerLastSeen
-    ) {
+    const settings = this.aiSettings
+    if (settings === null || settings.model.trim().length === 0) {
       await this._showPopup({
-        type: PopupType.GenerateCommitMessageDisclaimer,
-        repository,
-        filesSelected,
+        type: PopupType.Preferences,
+        initialSelectedTab: PreferencesTab.AI,
       })
       return false
     }
@@ -6462,29 +6019,22 @@ export class AppStore extends TypedBaseStore<IAppState> {
           return false
         }
 
-        const response = enableCopilotSdkCommitMessageGeneration(account)
-          ? await this.copilotStore.generateCommitMessage(
-              account,
-              diff,
-              repository.path,
-              await this.resolveCopilotModelRequest(
-                this.getSelectedCopilotModels(account)[
-                  'commit-message-generation'
-                ] ?? null
-              ),
-              this.repositoryStateCache
-                .get(repository)
-                ?.changesState.currentRepoRulesInfo?.commitMessagePatterns.getRules() ??
-                [],
-              signal
-            )
-          : await API.fromAccount(account).getDiffChangesCommitMessage(diff)
+        const response = await generateCommitMessage(
+          settings,
+          diff,
+          repository.path,
+          this.repositoryStateCache
+            .get(repository)
+            ?.changesState.currentRepoRulesInfo?.commitMessagePatterns.getRules() ??
+            [],
+          signal
+        )
 
         this._setCommitMessage(repository, {
           summary: response.title,
           description: response.description,
           timestamp: Date.now(),
-          generatedByCopilot: true,
+          generatedByAI: true,
         })
 
         this.statsStore.increment('generateCommitMessageCount')
@@ -6493,16 +6043,26 @@ export class AppStore extends TypedBaseStore<IAppState> {
           return false
         }
 
-        this.emitError(
-          new ErrorWithMetadata(e, {
-            repository,
-          })
-        )
+        this.emitError(new ErrorWithMetadata(e, { repository }))
         return false
       }
 
       return true
     })
+  }
+
+  /** This shouldn't be called directly. See 'Dispatcher'. */
+  public async _setAISettings(
+    settings: IAISettings | null,
+    apiKey?: string
+  ): Promise<void> {
+    if (settings !== null && apiKey !== undefined) {
+      await setAIProviderKey(settings.providerId, apiKey)
+    }
+
+    this.aiSettings = settings
+    saveAISettings(settings)
+    this.emitUpdate()
   }
 
   /** This shouldn't be called directly. See 'Dispatcher'. */
@@ -6516,868 +6076,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
 
     abortController.abort()
-  }
-
-  /**
-   * Extract display labels and git refs for both sides of a conflict.
-   */
-  private async getConflictLabelsAndRefs(
-    repository: Repository,
-    conflictState: ConflictState,
-    multiCommitOperationState: IMultiCommitOperationState | null
-  ): Promise<{
-    readonly ourLabel: string
-    readonly theirLabel: string
-    readonly ourRef: string | undefined
-    readonly theirRef: string | undefined
-  }> {
-    if (isMergeConflictState(conflictState)) {
-      const theirBranch = await this.getMergeConflictsTheirBranch(
-        repository,
-        false,
-        multiCommitOperationState
-      )
-      return {
-        ourLabel: conflictState.currentBranch,
-        ourRef: conflictState.currentBranch,
-        theirLabel: theirBranch ?? 'incoming branch',
-        theirRef: theirBranch,
-      }
-    }
-
-    if (isRebaseConflictState(conflictState)) {
-      return {
-        ourLabel: conflictState.baseBranch ?? 'current branch',
-        ourRef: conflictState.baseBranch,
-        theirLabel: conflictState.targetBranch,
-        theirRef: conflictState.targetBranch,
-      }
-    }
-
-    if (isCherryPickConflictState(conflictState)) {
-      const sourceBranch =
-        multiCommitOperationState !== null &&
-        multiCommitOperationState.operationDetail.kind ===
-          MultiCommitOperationKind.CherryPick &&
-        multiCommitOperationState.operationDetail.sourceBranch !== null
-          ? multiCommitOperationState.operationDetail.sourceBranch.name
-          : undefined
-
-      return {
-        ourLabel: conflictState.targetBranchName,
-        ourRef: conflictState.targetBranchName,
-        theirLabel: sourceBranch ?? 'cherry-picked commit',
-        theirRef: sourceBranch,
-      }
-    }
-
-    return assertNever(conflictState, 'Unsupported conflict kind')
-  }
-
-  /** This shouldn't be called directly. See 'Dispatcher'. */
-  public async _resolveConflictsWithCopilot(
-    repository: Repository,
-    onProgress?: (progress: IConflictResolutionProgress) => void,
-    signal?: AbortSignal
-  ): Promise<{
-    readonly resolutions: ReadonlyArray<IFileResolution>
-    readonly summary: ICopilotResolutionSummary
-    readonly skippedFiles: ReadonlyArray<ICopilotSkippedFile>
-  } | null> {
-    if (!enableCopilotConflictResolution()) {
-      return null
-    }
-
-    const account = getAccountForCopilotConflictResolution(
-      this.accounts,
-      repository
-    )
-    if (!account) {
-      return null
-    }
-
-    const totalTimer = startTimer('resolve conflicts with Copilot', repository)
-    let failureStage: CopilotConflictResolutionFailureStage = 'gather-context'
-
-    try {
-      const state = this.repositoryStateCache.get(repository)
-      const { conflictState } = state.changesState
-
-      if (conflictState === null) {
-        log.warn(
-          'AppStore: resolveConflictsWithCopilot called with no active conflict state'
-        )
-        this.statsStore.increment(
-          'copilotConflictResolutionNoConflictStateCount'
-        )
-        return null
-      }
-
-      const labelsTimer = startTimer('gather conflict labels', repository)
-      const labels = await this.getConflictLabelsAndRefs(
-        repository,
-        conflictState,
-        state.multiCommitOperationState
-      )
-      labelsTimer.done()
-
-      const conflictedFiles = getConflictedFiles(
-        state.changesState.workingDirectory,
-        conflictState.manualResolutions
-      )
-
-      if (conflictedFiles.length === 0) {
-        log.warn(
-          'AppStore: resolveConflictsWithCopilot called with no conflicted files'
-        )
-        this.statsStore.increment(
-          'copilotConflictResolutionNoConflictedFilesCount'
-        )
-        return null
-      }
-
-      log.info(
-        `[Timing] resolving ${conflictedFiles.length} conflicted file(s)`
-      )
-
-      const context = await this.gatherConflictResolutionContext(
-        repository,
-        labels,
-        conflictedFiles,
-        state
-      )
-
-      const resolveTimer = startTimer(
-        'copilotStore.resolveConflicts',
-        repository
-      )
-      failureStage = 'resolve-model'
-      const modelRequest = await this.resolveCopilotModelRequest(
-        this.getSelectedCopilotModels(account)['conflict-resolution'] ?? null
-      )
-      try {
-        const result = await this.copilotStore.resolveConflicts(
-          account,
-          context,
-          repository.path,
-          modelRequest,
-          onProgress,
-          signal
-        )
-        failureStage = 'process-result'
-
-        // The model can only cite data we placed in the prompt, so resolving
-        // its references is a simple lookup against the gathered context —
-        // no re-fetching or re-hydration required. When the model cites
-        // nothing, fall back to the most informative item we gathered so the
-        // "Context" list always traces the conflict to at least one source.
-        const cited = selectReferencedContext(result.references, context)
-        const references =
-          cited.length > 0 ? cited : fallbackReferencedContext(context)
-
-        // Files Copilot declined to resolve (too large, unreadable, no
-        // parseable markers, etc.) so the result dialog can surface them for
-        // manual resolution.
-        const skippedFiles = context.files.flatMap(f =>
-          f.skippedReason !== undefined
-            ? [{ path: f.path, reason: f.skippedReason }]
-            : []
-        )
-
-        if (
-          result.resolutions.length === 0 &&
-          skippedFiles.length === context.files.length
-        ) {
-          this.statsStore.increment(
-            'copilotConflictResolutionAllFilesSkippedCount'
-          )
-        }
-
-        return {
-          resolutions: result.resolutions,
-          summary: {
-            markdown: result.summary,
-            ourLabel: labels.ourLabel,
-            theirLabel: labels.theirLabel,
-            references,
-          },
-          skippedFiles,
-        }
-      } finally {
-        resolveTimer.done()
-      }
-    } catch (e) {
-      // A user-initiated cancellation isn't a failure — don't log it as one.
-      if (signal?.aborted) {
-        log.info('AppStore: Copilot conflict resolution aborted by user')
-        return null
-      }
-      // Propagate real failures so the caller can surface the underlying error
-      // instead of a generic "no results" message.
-      log.warn('AppStore: Copilot conflict resolution failed', e)
-      throw e instanceof CopilotConflictResolutionError
-        ? e
-        : new CopilotConflictResolutionError(e, failureStage)
-    } finally {
-      totalTimer.done()
-    }
-  }
-
-  /**
-   * Gather the full, display-ready context for a Copilot conflict
-   * resolution in a single pass: the conflicted file hunks, the recent
-   * commits from both sides (with remote-reachability and github.com
-   * links), and the pull requests we can associate with each side.
-   *
-   * This is the one place context is collected. The same object feeds the
-   * Copilot prompt *and* the dialog's summary card, so there's no second
-   * pass to re-hydrate the model's cited references.
-   *
-   * Pull requests are resolved local-cache-first; only numbers we can't
-   * find locally are fetched from the API (capped, best-effort) so a
-   * merged PR's title and body still reach the prompt.
-   */
-  private async gatherConflictResolutionContext(
-    repository: Repository,
-    labels: {
-      readonly ourLabel: string
-      readonly theirLabel: string
-      readonly ourRef: string | undefined
-      readonly theirRef: string | undefined
-    },
-    conflictedFiles: ReadonlyArray<WorkingDirectoryFileChange>,
-    state: IRepositoryState
-  ): Promise<IConflictResolutionContext> {
-    // Enrich file entries with delete-vs-modify metadata so
-    // buildConflictContext includes them instead of skipping.
-    const filesWithDeleteInfo = conflictedFiles.map(f => {
-      const deletedSide = getDeletedSideFromStatus(f)
-      return deletedSide !== undefined
-        ? { path: f.path, deletedSide }
-        : { path: f.path }
-    })
-
-    const contextTimer = startTimer('build conflict context', repository)
-    const fileContext = await buildConflictContext(
-      labels.ourLabel,
-      labels.theirLabel,
-      repository.path,
-      filesWithDeleteInfo
-    )
-    contextTimer.done()
-
-    // Best-effort enrichment — never block resolution on these.
-    const commitContextTimer = startTimer('gather commit context', repository)
-    const commitContext =
-      labels.ourRef && labels.theirRef
-        ? await gatherCommitContext(
-            repository,
-            labels.ourRef,
-            labels.theirRef
-          ).catch(() => null)
-        : null
-    commitContextTimer.done()
-
-    const ghRepo = isRepositoryWithGitHubRepository(repository)
-      ? repository.gitHubRepository
-      : null
-
-    // Treat a commit as "on the remote" when it isn't in the git store's
-    // local-only set. localCommitSHAs tracks current-branch commits that
-    // haven't been pushed yet, so anything else (most notably theirs-side
-    // commits that arrived via fetch) is safe to link to github.com.
-    const localShas = new Set(
-      this.gitStoreCache.get(repository).localCommitSHAs
-    )
-    const toContextCommit = (commit: Commit): IConflictContextCommit => ({
-      sha: commit.sha,
-      shortSha: commit.shortSha,
-      summary: commit.summary,
-      isOnRemote: !localShas.has(commit.sha),
-    })
-
-    const currentPullRequest = state.branchesState.currentPullRequest
-    const seededPullRequests = new Map<number, IConflictContextPullRequest>()
-    if (currentPullRequest !== null) {
-      // The current branch's own PR is authoritative from app state and may
-      // be merged/closed (and thus absent from the open-PR cache), so seed
-      // it directly rather than looking it up.
-      seededPullRequests.set(currentPullRequest.pullRequestNumber, {
-        number: currentPullRequest.pullRequestNumber,
-        title: currentPullRequest.title,
-        body: currentPullRequest.body,
-      })
-    }
-
-    // Mine PR references from *both* sides' commits. Ours-vs-theirs is not a
-    // reliable proxy for "which side carries the PRs" — a rebase, for
-    // instance, makes ours the branch you're landing onto — so we gather
-    // symmetrically and let the model decide what's material.
-    const allPrNumbers = new Set<number>([
-      ...seededPullRequests.keys(),
-      ...extractPullRequestNumbersFromCommits(commitContext?.ourCommits ?? []),
-      ...extractPullRequestNumbersFromCommits(
-        commitContext?.theirCommits ?? []
-      ),
-    ])
-
-    const resolved = await this.resolvePullRequestContexts(
-      repository,
-      ghRepo,
-      [...allPrNumbers],
-      seededPullRequests
-    )
-
-    // Build a deterministic flat list from the input number order.
-    const pullRequests = [...allPrNumbers]
-      .map(n => resolved.get(n))
-      .filter((pr): pr is IConflictContextPullRequest => pr !== undefined)
-
-    return {
-      ...fileContext,
-      pullRequests,
-      ourCommits: (commitContext?.ourCommits ?? []).map(toContextCommit),
-      theirCommits: (commitContext?.theirCommits ?? []).map(toContextCommit),
-    }
-  }
-
-  /**
-   * Resolve a set of pull-request numbers into display-ready context,
-   * preferring the local cache and falling back to the API for any missing
-   * (e.g. merged PRs no longer in the open-PR cache). Capped and
-   * best-effort: failures are logged or skipped. `seeded` entries are
-   * treated as already resolved and never re-fetched.
-   */
-  private async resolvePullRequestContexts(
-    repository: Repository,
-    ghRepo: GitHubRepository | null,
-    numbers: ReadonlyArray<number>,
-    seeded: ReadonlyMap<number, IConflictContextPullRequest>
-  ): Promise<Map<number, IConflictContextPullRequest>> {
-    const byNumber = new Map<number, IConflictContextPullRequest>(seeded)
-
-    const lookups = numbers
-      .filter(n => !byNumber.has(n))
-      .slice(0, MaxPullRequestLookups)
-    if (lookups.length === 0 || !isRepositoryWithGitHubRepository(repository)) {
-      return byNumber
-    }
-
-    try {
-      const allPRs = await this.pullRequestCoordinator.getAllPullRequests(
-        repository
-      )
-      for (const pr of findPullRequestsByNumbers(lookups, allPRs)) {
-        byNumber.set(pr.pullRequestNumber, {
-          number: pr.pullRequestNumber,
-          title: pr.title,
-          body: pr.body,
-        })
-      }
-    } catch (e) {
-      log.warn('AppStore: failed to read conflict-side PRs from local cache', e)
-    }
-
-    // Fetch anything still missing from the API so merged PRs (no longer in
-    // the open-PR cache) still contribute their title and body.
-    const missing = lookups.filter(n => !byNumber.has(n))
-    if (missing.length > 0 && ghRepo) {
-      const account = getAccountForRepository(this.accounts, repository)
-      if (account !== null) {
-        const api = API.fromAccount(account)
-        await Promise.all(
-          missing.map(async prNumber => {
-            try {
-              const apiPr = await api.fetchPullRequest(
-                ghRepo.owner.login,
-                ghRepo.name,
-                String(prNumber)
-              )
-              if (apiPr) {
-                byNumber.set(prNumber, {
-                  number: prNumber,
-                  title: apiPr.title,
-                  body: apiPr.body,
-                })
-              }
-            } catch {
-              // Best-effort — skip PRs we can't fetch.
-            }
-          })
-        )
-      }
-    }
-
-    return byNumber
-  }
-
-  /**
-   * Pre-flight entry point for Copilot conflict resolution invoked from
-   * the manual conflicts dialog's "Resolve with Copilot" button.
-   *
-   * Verifies a Copilot-enabled account exists, sets the first-click flag,
-   * and gates on the AI-tool disclaimer (shown on first use and again
-   * every 30 days). On clean pass, transitions the multi-commit-operation
-   * step to the loading interstitial and kicks off
-   * `_startCopilotConflictResolution`.
-   *
-   * This shouldn't be called directly. See `Dispatcher`.
-   */
-  public async _attemptCopilotConflictResolution(
-    repository: Repository
-  ): Promise<void> {
-    const state = this.repositoryStateCache.get(repository)
-    const { multiCommitOperationState } = state
-    if (multiCommitOperationState === null) {
-      return
-    }
-
-    const { step } = multiCommitOperationState
-    if (step.kind !== MultiCommitOperationStepKind.ShowConflicts) {
-      return
-    }
-
-    const account = getAccountForCopilotConflictResolution(
-      this.accounts,
-      repository
-    )
-
-    if (!account) {
-      return
-    }
-
-    // Track that the user has clicked the entry point so we can hide the
-    // "New" call-to-action bubble and nudge after 5 uses.
-    this._incrementCopilotConflictResolutionClickCount()
-
-    // First-use disclaimer + periodic re-confirmation. Mirrors the
-    // commit-message-generation pattern.
-    if (
-      !this.copilotConflictResolutionDisclaimerLastSeen ||
-      offsetFromNow(-30, 'days') >
-        this.copilotConflictResolutionDisclaimerLastSeen
-    ) {
-      await this._showPopup({
-        type: PopupType.CopilotConflictResolutionDisclaimer,
-        repository,
-      })
-      return
-    }
-
-    // Nudge the user to enable "always use Copilot" after 5 clicks.
-    if (
-      !this.alwaysUseCopilotForConflictResolution &&
-      this.copilotConflictResolutionClickCount === 5
-    ) {
-      await this._showPopup({
-        type: PopupType.CopilotConflictResolutionAlwaysNudge,
-        repository,
-      })
-      return
-    }
-
-    // Transition to the loading interstitial and start the resolution.
-    const { conflictState } = step
-    this.repositoryStateCache.updateMultiCommitOperationState(
-      repository,
-      () => ({
-        step: {
-          kind: MultiCommitOperationStepKind.ShowCopilotConflictsLoading,
-          conflictState,
-        },
-        useCopilotConflictResolution: true,
-      })
-    )
-    this.emitUpdate()
-
-    return this._startCopilotConflictResolution(repository)
-  }
-
-  /**
-   * Orchestrate Copilot conflict resolution: call the API, emit progress
-   * updates, and transition to the result dialog on success. File writes are
-   * deferred until the user confirms (see _applyCopilotConflictResolutions).
-   *
-   * This shouldn't be called directly. See `Dispatcher`.
-   */
-  public async _startCopilotConflictResolution(
-    repository: Repository
-  ): Promise<void> {
-    const state = this.repositoryStateCache.get(repository)
-    const { multiCommitOperationState } = state
-    if (multiCommitOperationState === null) {
-      return
-    }
-
-    const { step } = multiCommitOperationState
-    if (
-      step.kind !== MultiCommitOperationStepKind.ShowCopilotConflictsLoading
-    ) {
-      return
-    }
-
-    const { conflictState } = step
-    const account = getAccountForCopilotConflictResolution(
-      this.accounts,
-      repository
-    )
-    if (!account) {
-      return
-    }
-
-    // Controller used to actually cancel the in-flight SDK turn when the user
-    // clicks "Stop" (see _abortCopilotConflictResolution).
-    const abortController = new AbortController()
-    const copilotModels =
-      this.copilotModelsByAccount.get(getCopilotAccountCacheKey(account)) ??
-      null
-    const copilotResolutionModel = getConflictResolutionModelDisplay(
-      this.getSelectedCopilotModels(account)['conflict-resolution'] ?? null,
-      copilotModels,
-      this.byokProviders
-    )
-    this.repositoryStateCache.updateMultiCommitOperationState(
-      repository,
-      () => ({
-        copilotResolutionAbortController: abortController,
-        copilotResolutionModel,
-      })
-    )
-
-    // Only the run that owns this controller may mutate Copilot resolution
-    // state. Guards against a stale run (still unwinding after the user
-    // cancelled and restarted) clobbering the controller, progress, or result
-    // of the newer run.
-    const ownsCurrentRun = () =>
-      this.repositoryStateCache.get(repository).multiCommitOperationState
-        ?.copilotResolutionAbortController === abortController
-
-    this.statsStore.increment('initiateResolveConflictsWithCopilotCount')
-    const resolveStartTime = performance.now()
-
-    try {
-      const result = await this._resolveConflictsWithCopilot(
-        repository,
-        progress => {
-          // Bail if user cancelled while the request was in-flight, or if a
-          // newer run has taken over.
-          const current = this.repositoryStateCache.get(repository)
-          const mcoState = current.multiCommitOperationState
-          if (
-            mcoState === null ||
-            mcoState.step.kind !==
-              MultiCommitOperationStepKind.ShowCopilotConflictsLoading ||
-            !ownsCurrentRun()
-          ) {
-            return
-          }
-          if (__DEV__ && progress.reasoningSnippet !== undefined) {
-            log.info(
-              `[Copilot SDK] app-store progress snippet: ${progress.reasoningSnippet}`
-            )
-          }
-          this.repositoryStateCache.updateMultiCommitOperationState(
-            repository,
-            () => ({ copilotResolutionProgress: progress })
-          )
-          this.emitUpdate()
-        },
-        abortController.signal
-      )
-
-      // The user stopped the resolution. The loading dialog has already
-      // navigated back to the conflicts list, so just clear the in-flight
-      // state without surfacing an error.
-      if (abortController.signal.aborted) {
-        if (ownsCurrentRun()) {
-          this.repositoryStateCache.updateMultiCommitOperationState(
-            repository,
-            () => ({
-              copilotResolutionProgress: null,
-              copilotResolutionAbortController: null,
-            })
-          )
-          this.emitUpdate()
-        }
-        return
-      }
-
-      // A newer run took over while we were awaiting — let it own the outcome.
-      if (!ownsCurrentRun()) {
-        return
-      }
-
-      // Re-check state: user may have cancelled during the await
-      const currentState = this.repositoryStateCache.get(repository)
-      const currentMco = currentState.multiCommitOperationState
-      if (currentMco === null) {
-        return
-      }
-
-      // The user can navigate to ConfirmAbort while we're awaiting the
-      // resolution. If they came from the loading step, we still want
-      // the resolution to be available when they click "Return to
-      // conflicts" — store the result and rewrite the return target
-      // so they land on the result dialog rather than an empty
-      // ShowCopilotConflicts step.
-      const currentStep = currentMco.step
-      const isStillLoading =
-        currentStep.kind ===
-        MultiCommitOperationStepKind.ShowCopilotConflictsLoading
-      const isConfirmAbortFromLoading =
-        currentStep.kind === MultiCommitOperationStepKind.ConfirmAbort &&
-        currentStep.returnToStepKind ===
-          MultiCommitOperationStepKind.ShowCopilotConflictsLoading
-
-      if (!isStillLoading && !isConfirmAbortFromLoading) {
-        return
-      }
-
-      if (result === null) {
-        this.repositoryStateCache.updateMultiCommitOperationState(
-          repository,
-          () => ({
-            step: {
-              kind: MultiCommitOperationStepKind.ShowConflicts,
-              conflictState,
-            },
-            useCopilotConflictResolution: false,
-            copilotResolutionProgress: null,
-            copilotResolutionAbortController: null,
-          })
-        )
-        this.emitUpdate()
-        return
-      }
-
-      if (isConfirmAbortFromLoading) {
-        // Stash the result and update the return target so the user
-        // lands on the result dialog if they cancel the abort.
-        this.repositoryStateCache.updateMultiCommitOperationState(
-          repository,
-          () => ({
-            step: {
-              kind: MultiCommitOperationStepKind.ConfirmAbort,
-              conflictState,
-              returnToStepKind:
-                MultiCommitOperationStepKind.ShowCopilotConflicts,
-            },
-            copilotResolutions: result.resolutions,
-            copilotResolutionSummary: result.summary,
-            copilotSkippedFiles: result.skippedFiles,
-            copilotResolutionProgress: null,
-            copilotResolutionAbortController: null,
-          })
-        )
-
-        this.emitUpdate()
-        return
-      }
-
-      // Store resolutions and transition to the result dialog.
-      // Files are NOT written to disk yet — that happens when the user
-      // clicks "Continue Merge" (see _applyCopilotConflictResolutions).
-      this.repositoryStateCache.updateMultiCommitOperationState(
-        repository,
-        () => ({
-          step: {
-            kind: MultiCommitOperationStepKind.ShowCopilotConflicts,
-            conflictState,
-          },
-          copilotResolutions: result.resolutions,
-          copilotResolutionSummary: result.summary,
-          copilotSkippedFiles: result.skippedFiles,
-          copilotResolutionProgress: null,
-          copilotResolutionAbortController: null,
-        })
-      )
-
-      this.emitUpdate()
-
-      // Record resolution timing buckets
-      const elapsedSeconds = (performance.now() - resolveStartTime) / 1000
-      if (elapsedSeconds > 15) {
-        this.statsStore.increment('copilotConflictResolutionOver15sCount')
-      }
-      if (elapsedSeconds > 30) {
-        this.statsStore.increment('copilotConflictResolutionOver30sCount')
-      }
-      if (elapsedSeconds > 60) {
-        this.statsStore.increment('copilotConflictResolutionOver60sCount')
-      }
-      if (elapsedSeconds > 120) {
-        this.statsStore.increment('copilotConflictResolutionOver120sCount')
-      }
-    } catch (e) {
-      log.warn('AppStore: Copilot conflict resolution flow failed', e)
-
-      // A stale run shouldn't surface errors or reset a newer run's state.
-      if (!ownsCurrentRun()) {
-        return
-      }
-
-      this.statsStore.increment('copilotConflictResolutionErrorCount')
-
-      const failure =
-        e instanceof CopilotConflictResolutionError
-          ? e
-          : new CopilotConflictResolutionError(e, 'unknown')
-      sendNonFatalException('copilotConflictResolution', failure)
-
-      // Surface the error to the user so they understand why they were
-      // routed back to manual conflict resolution. Mirrors the pattern
-      // used by `_generateCommitMessage`.
-      this.emitError(
-        new ErrorWithMetadata(failure.underlyingError, { repository })
-      )
-
-      // Transition back to manual conflict resolution
-      this.repositoryStateCache.updateMultiCommitOperationState(
-        repository,
-        () => ({
-          step: {
-            kind: MultiCommitOperationStepKind.ShowConflicts,
-            conflictState,
-          },
-          useCopilotConflictResolution: false,
-          copilotResolutions: null,
-          copilotResolutionSummary: null,
-          copilotSkippedFiles: null,
-          copilotResolutionProgress: null,
-          copilotResolutionAbortController: null,
-        })
-      )
-
-      this.emitUpdate()
-    }
-  }
-
-  /**
-   * Cancel the in-flight Copilot conflict resolution for the given repository,
-   * if one is running. Fires the stored AbortController so the underlying SDK
-   * turn is torn down immediately rather than running to completion in the
-   * background.
-   *
-   * This shouldn't be called directly. See `Dispatcher`.
-   */
-  public _abortCopilotConflictResolution(repository: Repository): void {
-    const state = this.repositoryStateCache.get(repository)
-    const controller =
-      state.multiCommitOperationState?.copilotResolutionAbortController ?? null
-
-    if (controller !== null) {
-      controller.abort()
-      this.statsStore.increment('copilotConflictResolutionStoppedCount')
-    }
-  }
-
-  /**
-   * Write Copilot-resolved file contents to disk and stage them.
-   * Called when the user clicks "Continue Merge" from the Copilot conflicts
-   * result dialog.
-   *
-   * This shouldn't be called directly. See `Dispatcher`.
-   */
-  public async _applyCopilotConflictResolutions(
-    repository: Repository
-  ): Promise<void> {
-    const state = this.repositoryStateCache.get(repository)
-    const { multiCommitOperationState } = state
-    if (multiCommitOperationState === null) {
-      return
-    }
-
-    const { copilotResolutions, step } = multiCommitOperationState
-    if (copilotResolutions === null || copilotResolutions.length === 0) {
-      return
-    }
-
-    // Respect any manual overrides the user chose in the result dialog
-    const manualResolutions =
-      step.kind === MultiCommitOperationStepKind.ShowCopilotConflicts
-        ? step.conflictState.manualResolutions
-        : new Map<string, ManualConflictResolution>()
-
-    this.statsStore.increment('copilotConflictResolutionAcceptedCount')
-    if (manualResolutions.size > 0) {
-      this.statsStore.increment('copilotConflictResolutionWithOverridesCount')
-    }
-
-    const pathsToStage: string[] = []
-
-    for (const resolution of copilotResolutions) {
-      if (manualResolutions.has(resolution.path)) {
-        continue
-      }
-
-      // Delete-vs-modify conflicts are resolved by setting a manual
-      // resolution (ours/theirs) rather than writing file content.
-      // The existing stageManualConflictResolution flow handles the
-      // actual git checkout --ours/--theirs and staging at commit time.
-      if (resolution.deleteConflictAction !== undefined) {
-        const file = state.changesState.workingDirectory.files.find(
-          f => f.path === resolution.path
-        )
-        if (file === undefined) {
-          continue
-        }
-        const deletedSide = getDeletedSideFromStatus(file)
-        if (deletedSide === undefined) {
-          continue
-        }
-        // "keep" → choose the non-deleted side, "delete" → choose the deleted side
-        const manualChoice =
-          resolution.deleteConflictAction === 'keep'
-            ? deletedSide === 'ours'
-              ? ManualConflictResolution.theirs
-              : ManualConflictResolution.ours
-            : deletedSide === 'ours'
-            ? ManualConflictResolution.ours
-            : ManualConflictResolution.theirs
-        this._updateManualConflictResolution(
-          repository,
-          resolution.path,
-          manualChoice
-        )
-        continue
-      }
-
-      const absolutePath = await resolveWithin(repository.path, resolution.path)
-      if (absolutePath === null) {
-        log.warn(
-          `Copilot resolution skipped: path outside repository: ${resolution.path}`
-        )
-        continue
-      }
-
-      // If the user resolved this file externally (e.g. in their editor) while
-      // the result dialog was open, git status will report it with no remaining
-      // conflict markers. Overwriting it with Copilot's stored content would
-      // silently clobber their work, so skip it and let their resolution stand.
-      // This mirrors how the manual conflicts dialog determines a file is
-      // resolved (`hasUnresolvedConflicts`).
-      const onDiskFile = state.changesState.workingDirectory.files.find(
-        f => f.path === resolution.path
-      )
-      if (
-        onDiskFile !== undefined &&
-        isConflictedFileStatus(onDiskFile.status) &&
-        !hasUnresolvedConflicts(onDiskFile.status)
-      ) {
-        continue
-      }
-
-      await writeFile(absolutePath, resolution.resolvedContent, 'utf8')
-      pathsToStage.push(resolution.path)
-    }
-
-    if (pathsToStage.length > 0) {
-      await git(
-        ['add', '--', ...pathsToStage],
-        repository.path,
-        'copilotConflictResolution'
-      )
-    }
   }
 
   /**
@@ -7741,49 +6439,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
   }
 
-  /** This shouldn't be called directly. See `Dispatcher`. */
-  public async _openInCopilotApp(repositoryPath: string): Promise<void> {
-    if (!enableCopilotAppHandoff()) {
-      log.debug('Ignoring unavailable Copilot app handoff')
-      return
-    }
-
-    try {
-      const appPath =
-        this.copilotAppPath !== null
-          ? this.copilotAppPath
-          : (await findCopilotApp()) ?? undefined
-      if (appPath === undefined) {
-        throw new CopilotAppError(
-          'not-found',
-          'GitHub Copilot could not be found.'
-        )
-      }
-
-      await openInCopilotApp(appPath, repositoryPath)
-    } catch (error) {
-      log.error('Could not hand off to GitHub Copilot', error)
-      if (error instanceof CopilotAppError && error.kind === 'not-found') {
-        this._showPopup({
-          type: PopupType.CopilotAppNotFound,
-        })
-      } else {
-        throw error
-      }
-    }
-  }
-
-  /** This shouldn't be called directly. See `Dispatcher`. */
-  public async _setCopilotAppPath(path: string | null): Promise<void> {
-    if (path === null) {
-      localStorage.removeItem(copilotAppPathKey)
-    } else {
-      localStorage.setItem(copilotAppPathKey, path)
-    }
-    this.copilotAppPath = path
-    this.emitUpdate()
-  }
-
   /** Open a path using a selected editor without changing preferences. */
   public async _openInSelectedExternalEditor(
     fullPath: string,
@@ -7824,22 +6479,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
   ): Promise<void> {
     await saveGitIgnore(repository, text)
     return this._refreshRepository(repository)
-  }
-
-  /** Set whether the user has opted out of stats reporting. */
-  public async setStatsOptOut(
-    optOut: boolean,
-    userViewedPrompt: boolean
-  ): Promise<void> {
-    await this.statsStore.setOptOut(optOut, userViewedPrompt)
-
-    this.emitUpdate()
-  }
-
-  public _setUseExternalCredentialHelper(value: boolean) {
-    setUseExternalCredentialHelper(value)
-    this.useExternalCredentialHelper = value
-    this.emitUpdate()
   }
 
   public _setAskToMoveToApplicationsFolderSetting(
@@ -8041,18 +6680,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
   }
 
-  public _setUpdateBannerVisibility(visibility: boolean) {
-    this.isUpdateAvailableBannerVisible = visibility
-
-    this.emitUpdate()
-  }
-
-  public _setUpdateShowCaseVisibility(visibility: boolean) {
-    this.isUpdateShowcaseVisible = visibility
-
-    this.emitUpdate()
-  }
-
   public _setBanner(state: Banner) {
     this.currentBanner = state
     this.emitUpdate()
@@ -8071,19 +6698,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
     this.currentBanner = null
     this.emitUpdate()
-  }
-
-  public _reportStats() {
-    return this.statsStore.reportStats(this.accounts, this.repositories)
-  }
-
-  /** This shouldn't be called directly. See 'Dispatcher'. */
-  public _sendStats() {
-    return this.statsStore.sendStats(this.accounts, this.repositories)
-  }
-
-  public _recordLaunchStats(stats: ILaunchStats): Promise<void> {
-    return this.statsStore.recordLaunchStats(stats)
   }
 
   public async _appendIgnoreRule(
@@ -8143,10 +6757,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
       this.repositoryIndicatorUpdater.resume()
       if (this.selectedRepository instanceof Repository) {
         this.startPullRequestUpdater(this.selectedRepository)
-        // if we're in the tutorial and we don't have an editor yet, check for one!
-        if (this.currentOnboardingTutorialStep === TutorialStep.PickEditor) {
-          await this._resolveCurrentEditor()
-        }
       }
     } else {
       this.repositoryIndicatorUpdater.pause()
@@ -8221,42 +6831,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
       repository,
       workflowPreferences
     )
-  }
-
-  /**
-   * Add a tutorial repository.
-   *
-   * This method differs from the `_addRepositories` method in that it
-   * requires that the repository has been created on the remote and
-   * set up to track it. Given that tutorial repositories are created
-   * from the no-repositories blank slate it shouldn't be possible for
-   * another repository with the same path to exist in the repositories
-   * table but in case that hangs in the future this method will set
-   * the tutorial flag on the existing repository at the given path.
-   */
-  public async _addTutorialRepository(
-    path: string,
-    endpoint: string,
-    apiRepository: IAPIFullRepository
-  ) {
-    const type = await getRepositoryType(path)
-    if (type.kind === 'regular') {
-      const validatedPath = type.topLevelWorkingDirectory
-      log.info(
-        `[AppStore] adding tutorial repository at ${validatedPath} to store`
-      )
-
-      await this.repositoriesStore.addTutorialRepository(
-        validatedPath,
-        endpoint,
-        apiRepository,
-        type.gitDir
-      )
-      this.tutorialAssessor.onNewTutorialRepository()
-    } else {
-      const error = new Error(`${path} isn't a git repository.`)
-      this.emitError(error)
-    }
   }
 
   public async _addRepositories(
@@ -8937,15 +7511,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     const resolvedExternalEditor = match != null ? match.editor : null
     if (this.resolvedExternalEditor !== resolvedExternalEditor) {
       this.resolvedExternalEditor = resolvedExternalEditor
-
-      // Make sure we let the tutorial assessor know that we have a new editor
-      // in case it's stuck waiting for one to be selected.
-      if (this.currentOnboardingTutorialStep === TutorialStep.PickEditor) {
-        if (this.selectedRepository instanceof Repository) {
-          this.updateCurrentTutorialStep(this.selectedRepository)
-        }
-      }
-
       this.emitUpdate()
     }
   }
@@ -9003,10 +7568,8 @@ export class AppStore extends TypedBaseStore<IAppState> {
     if (
       changesState.conflictState === null ||
       multiCommitOperationState === null ||
-      (multiCommitOperationState.step.kind !==
-        MultiCommitOperationStepKind.ShowConflicts &&
-        multiCommitOperationState.step.kind !==
-          MultiCommitOperationStepKind.ShowCopilotConflicts)
+      multiCommitOperationState.step.kind !==
+        MultiCommitOperationStepKind.ShowConflicts
     ) {
       return
     }
@@ -9163,58 +7726,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
       }
     }
     return repository
-  }
-
-  /**
-   * Create a tutorial repository using the given account. The account
-   * determines which host (i.e. GitHub.com or a GHES instance) that
-   * the tutorial repository should be created on.
-   *
-   * @param account The account (and thereby the GitHub host) under
-   *                which the repository is to be created created
-   */
-  public async _createTutorialRepository(account: Account) {
-    try {
-      await this.statsStore.recordTutorialStarted()
-
-      const name = 'desktop-tutorial'
-      const path = Path.resolve(await getDefaultDir(), name)
-
-      const apiRepository = await createTutorialRepository(
-        account,
-        name,
-        path,
-        (title, value, description) => {
-          if (
-            this.popupManager.currentPopup?.type ===
-            PopupType.CreateTutorialRepository
-          ) {
-            this.popupManager.updatePopup({
-              ...this.popupManager.currentPopup,
-              progress: { kind: 'generic', title, value, description },
-            })
-            this.emitUpdate()
-          }
-        }
-      )
-
-      await this._addTutorialRepository(path, account.endpoint, apiRepository)
-      await this.statsStore.recordTutorialRepoCreated()
-    } catch (err) {
-      sendNonFatalException('tutorialRepoCreation', err)
-
-      if (err instanceof GitError) {
-        this.emitError(err)
-      } else {
-        this.emitError(
-          new Error(
-            `Failed creating the tutorial repository.\n\n${err.message}`
-          )
-        )
-      }
-    } finally {
-      this._closePopup(PopupType.CreateTutorialRepository)
-    }
   }
 
   /** This shouldn't be called directly. See `Dispatcher`. */
@@ -9499,27 +8010,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     branch: Branch
   ): Promise<IAheadBehind | null> {
     return getBranchAheadBehind(repository, branch)
-  }
-
-  public _setLastThankYou(lastThankYou: ILastThankYou) {
-    // don't update if same length and same version (assumption
-    // is that update will be either adding a user or updating version)
-    const sameVersion =
-      this.lastThankYou !== undefined &&
-      this.lastThankYou.version === lastThankYou.version
-
-    const sameNumCheckedUsers =
-      this.lastThankYou !== undefined &&
-      this.lastThankYou.checkedUsers.length === lastThankYou.checkedUsers.length
-
-    if (sameVersion && sameNumCheckedUsers) {
-      return
-    }
-
-    setObject(lastThankYouKey, lastThankYou)
-    this.lastThankYou = lastThankYou
-
-    this.emitUpdate()
   }
 
   public _setUseCustomEditor(useCustomEditor: boolean) {
@@ -9840,27 +8330,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     this.emitUpdate()
   }
 
-  /** This shouldn't be called directly. See `Dispatcher`. */
-  public _setMultiCommitOperationStepWithCopilotResolution(
-    repository: Repository,
-    step: MultiCommitOperationStep,
-    useCopilotConflictResolution: boolean
-  ): void {
-    if (!useCopilotConflictResolution) {
-      this.statsStore.increment('copilotConflictResolutionSwitchToManualCount')
-    }
-
-    this.repositoryStateCache.updateMultiCommitOperationState(
-      repository,
-      () => ({
-        step,
-        useCopilotConflictResolution,
-      })
-    )
-
-    this.emitUpdate()
-  }
-
   public _setMultiCommitOperationTargetBranch(
     repository: Repository,
     targetBranch: Branch
@@ -9901,13 +8370,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
         value: 0,
       },
       userHasResolvedConflicts: false,
-      useCopilotConflictResolution: false,
-      copilotResolutions: null,
-      copilotResolutionSummary: null,
-      copilotSkippedFiles: null,
-      copilotResolutionProgress: null,
-      copilotResolutionAbortController: null,
-      copilotResolutionModel: null,
       originalBranchTip,
       targetBranch,
     })
@@ -10321,14 +8783,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     )
   }
 
-  public _quitApp(evenIfUpdating: boolean) {
-    if (evenIfUpdating) {
-      sendWillQuitEvenIfUpdatingSync()
-    }
-
-    quitApp()
-  }
-
   public _cancelQuittingApp() {
     sendCancelQuittingSync()
   }
@@ -10394,401 +8848,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
       this.updateResizableConstraints()
       this.emitUpdate()
     }
-  }
-
-  /** This shouldn't be called directly. See 'Dispatcher'. */
-  public _setSelectedCopilotModel(
-    account: Account,
-    feature: CopilotFeature,
-    model: string | null
-  ) {
-    const accountKey = getCopilotAccountCacheKey(account)
-    const currentSelections =
-      this.selectedCopilotModelsByAccount.get(accountKey) ?? {}
-    const current = currentSelections[feature] ?? null
-    if (model !== current) {
-      const updatedSelections = { ...currentSelections }
-      if (model === null) {
-        delete updatedSelections[feature]
-      } else {
-        updatedSelections[feature] = model
-      }
-
-      const updatedByAccount = new Map(this.selectedCopilotModelsByAccount)
-      if (Object.keys(updatedSelections).length === 0) {
-        updatedByAccount.delete(accountKey)
-      } else {
-        updatedByAccount.set(accountKey, updatedSelections)
-      }
-      this.selectedCopilotModelsByAccount = updatedByAccount
-      this.saveCopilotModelSelectionsByAccount()
-      this.emitUpdate()
-    }
-  }
-
-  private loadLegacyCopilotModelSelections(): CopilotModelSelections {
-    const raw = localStorage.getItem(selectedCopilotModelsKey)
-    if (raw !== null) {
-      try {
-        const parsed: unknown = JSON.parse(raw)
-        if (typeof parsed === 'object' && parsed !== null) {
-          return parsed as CopilotModelSelections
-        }
-      } catch {
-        // fall through to migration
-      }
-    }
-
-    return {}
-  }
-
-  private loadCopilotModelSelectionsByAccount(): CopilotModelSelectionsByAccount {
-    const raw = localStorage.getItem(selectedCopilotModelsByAccountKey)
-    if (raw === null) {
-      return new Map()
-    }
-
-    try {
-      const parsed: unknown = JSON.parse(raw)
-      if (typeof parsed === 'object' && parsed !== null) {
-        return new Map(Object.entries(parsed))
-      }
-    } catch {
-      // Ignore invalid persisted selections.
-    }
-
-    return new Map()
-  }
-
-  private saveCopilotModelSelectionsByAccount(): void {
-    if (this.selectedCopilotModelsByAccount.size === 0) {
-      localStorage.removeItem(selectedCopilotModelsByAccountKey)
-      return
-    }
-
-    localStorage.setItem(
-      selectedCopilotModelsByAccountKey,
-      JSON.stringify(Object.fromEntries(this.selectedCopilotModelsByAccount))
-    )
-  }
-
-  // TODO: to be removed after the migration period. Now Copilot models are stored
-  // per account, not globally.
-  private migrateCopilotModelSelections(): void {
-    const legacySelections = this.loadLegacyCopilotModelSelections()
-    if (Object.keys(legacySelections).length > 0) {
-      this.selectedCopilotModelsByAccount =
-        migrateCopilotModelSelectionsToAccounts(
-          legacySelections,
-          this.selectedCopilotModelsByAccount,
-          this.accounts
-        )
-      this.saveCopilotModelSelectionsByAccount()
-    }
-
-    localStorage.removeItem(selectedCopilotModelsKey)
-  }
-
-  private getSelectedCopilotModels(account: Account): CopilotModelSelections {
-    return (
-      this.selectedCopilotModelsByAccount.get(
-        getCopilotAccountCacheKey(account)
-      ) ?? {}
-    )
-  }
-
-  /** This shouldn't be called directly. See 'Dispatcher'. */
-  public _setSelectedCopilotModelsByAccount(
-    modelsByAccount: CopilotModelSelectionsByAccount
-  ) {
-    this.selectedCopilotModelsByAccount = new Map(
-      [...modelsByAccount].map(([key, models]) => [key, { ...models }])
-    )
-    // The Preferences dialog keeps its own copy of the selections in
-    // component state. If the user deletes/edits a BYOK provider through
-    // the popup stack while the dialog is open, that local copy can still
-    // reference a model that no longer exists; scrub on save so we never
-    // resurrect a stale selection.
-    this.scrubMissingCopilotModelSelections()
-    this.saveCopilotModelSelectionsByAccount()
-    this.emitUpdate()
-  }
-
-  /**
-   * Resolves a stored account Copilot model selection into a
-   * {@link CopilotModelRequest} suitable for
-   * {@link CopilotStore.generateCommitMessage}. BYOK provider secrets are
-   * read from the OS keychain at call time.
-   */
-  private async resolveCopilotModelRequest(
-    selection: string | null
-  ): Promise<CopilotModelRequest> {
-    if (selection === null) {
-      return { kind: 'copilot', modelId: null }
-    }
-
-    const key = parseModelKey(selection)
-    if (key.kind === 'copilot') {
-      return {
-        kind: 'copilot',
-        modelId: key.modelId === '' ? null : key.modelId,
-      }
-    }
-
-    const provider = this.byokProviders.find(p => p.id === key.providerId)
-    const model = provider?.models.find(m => m.id === key.modelId)
-    if (provider === undefined || model === undefined) {
-      // Selection points at a deleted provider/model; fall back to default.
-      return { kind: 'copilot', modelId: null }
-    }
-
-    let secret: string | null = null
-    if (provider.authKind !== 'none') {
-      try {
-        secret = await getBYOKSecret(provider.id)
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e)
-        throw new Error(
-          `Could not read the credential for the custom Copilot provider ` +
-            `'${provider.name}' from the OS keychain: ${message}`
-        )
-      }
-    }
-
-    if (provider.authKind !== 'none' && (secret === null || secret === '')) {
-      throw new Error(
-        `No ${
-          provider.authKind === 'bearer' ? 'bearer token' : 'API key'
-        } is stored for the custom Copilot provider '${provider.name}'. ` +
-          `Open Settings → Copilot → Providers and re-enter the credential.`
-      )
-    }
-
-    const providerConfig: CopilotProviderConfig = {
-      type: provider.type,
-      baseUrl: provider.baseUrl,
-      ...(provider.wireApi ? { wireApi: provider.wireApi } : {}),
-      ...(provider.type === 'azure' && provider.azureApiVersion
-        ? { azure: { apiVersion: provider.azureApiVersion } }
-        : {}),
-      ...(secret !== null && provider.authKind === 'apiKey'
-        ? { apiKey: secret }
-        : {}),
-      ...(secret !== null && provider.authKind === 'bearer'
-        ? { bearerToken: secret }
-        : {}),
-    }
-
-    return {
-      kind: 'byok',
-      modelId: model.id,
-      provider: providerConfig,
-      ...(model.reasoningEffort !== undefined
-        ? { reasoningEffort: model.reasoningEffort }
-        : {}),
-      ...(provider.requestTimeoutSeconds !== undefined &&
-      provider.requestTimeoutSeconds > 0
-        ? { timeoutMs: provider.requestTimeoutSeconds * 1000 }
-        : {}),
-    }
-  }
-
-  /** This shouldn't be called directly. See 'Dispatcher'. */
-  public async _addCopilotBYOKProvider(
-    provider: IBYOKProvider,
-    secret: string | null
-  ): Promise<void> {
-    // Write the secret first so a keychain failure doesn't leave a provider
-    // in localStorage without its credentials.
-    if (secret !== null && secret.length > 0) {
-      await setBYOKSecret(provider.id, secret)
-    }
-
-    this.byokProviders = [...this.byokProviders, provider]
-    saveBYOKProviders(this.byokProviders)
-
-    this.emitUpdate()
-  }
-
-  /**
-   * Updates a BYOK provider in place. Pass `secret = undefined` to leave the
-   * stored secret untouched, `null` to clear it, or a string to overwrite it.
-   *
-   * This shouldn't be called directly. See 'Dispatcher'.
-   */
-  public async _updateCopilotBYOKProvider(
-    provider: IBYOKProvider,
-    secret: string | null | undefined
-  ): Promise<void> {
-    const idx = this.byokProviders.findIndex(p => p.id === provider.id)
-    if (idx === -1) {
-      // Treat as add to keep the call idempotent from the UI's perspective.
-      return this._addCopilotBYOKProvider(provider, secret ?? null)
-    }
-
-    // Apply the keychain change first; if it throws, the persisted provider
-    // and its in-memory copy stay consistent with the existing secret.
-    if (secret === null) {
-      await deleteBYOKSecret(provider.id)
-    } else if (secret !== undefined && secret.length > 0) {
-      await setBYOKSecret(provider.id, secret)
-    }
-
-    const updated = [...this.byokProviders]
-    updated[idx] = provider
-    this.byokProviders = updated
-    saveBYOKProviders(this.byokProviders)
-
-    // If the user removed the model that was selected for any feature, fall
-    // back to the default for that feature.
-    this.scrubMissingCopilotModelSelections()
-
-    this.emitUpdate()
-  }
-
-  /** This shouldn't be called directly. See 'Dispatcher'. */
-  public async _deleteCopilotBYOKProvider(id: string): Promise<void> {
-    if (!this.byokProviders.some(p => p.id === id)) {
-      return
-    }
-
-    // Purge the secret first; on failure we keep the provider visible so the
-    // user can retry rather than ending up with an orphaned keychain entry
-    // and no UI to manage it.
-    await deleteBYOKSecret(id)
-
-    this.byokProviders = this.byokProviders.filter(p => p.id !== id)
-    saveBYOKProviders(this.byokProviders)
-
-    this.scrubMissingCopilotModelSelections()
-
-    this.emitUpdate()
-  }
-
-  /**
-   * Drops any per-feature model selection that points at a BYOK
-   * provider/model that no longer exists, or at a Copilot model that is
-   * no longer offered by the loaded model list. Copilot selections are
-   * only scrubbed once we have a definitive model list (i.e. the list has
-   * been fetched at least once); while still loading we leave them alone
-   * so a transient empty list doesn't downgrade valid selections.
-   */
-  private scrubMissingCopilotModelSelections(): void {
-    const selectionsByAccount = new Map<string, CopilotModelSelections>()
-
-    for (const [accountKey, selections] of this
-      .selectedCopilotModelsByAccount) {
-      const updated = this.scrubCopilotModelSelections(
-        selections,
-        this.copilotModelsByAccount.get(accountKey)
-      )
-      if (Object.keys(updated).length > 0) {
-        selectionsByAccount.set(accountKey, updated)
-      }
-    }
-
-    if (
-      selectionsByAccount.size !== this.selectedCopilotModelsByAccount.size ||
-      [...selectionsByAccount].some(
-        ([key, selections]) =>
-          selections !== this.selectedCopilotModelsByAccount.get(key)
-      )
-    ) {
-      this.selectedCopilotModelsByAccount = selectionsByAccount
-      this.saveCopilotModelSelectionsByAccount()
-    }
-  }
-
-  private scrubCopilotModelSelections(
-    selections: CopilotModelSelections,
-    copilotModels?: ReadonlyArray<Model> | null
-  ): CopilotModelSelections {
-    const updated: CopilotModelSelections = {}
-
-    for (const [feature, raw] of Object.entries(selections)) {
-      if (raw === undefined) {
-        continue
-      }
-      const key = parseModelKey(raw)
-      if (key.kind === 'byok') {
-        const provider = this.byokProviders.find(p => p.id === key.providerId)
-        if (
-          provider === undefined ||
-          !provider.models.some(m => m.id === key.modelId)
-        ) {
-          continue
-        }
-      } else if (
-        key.kind === 'copilot' &&
-        key.modelId !== '' &&
-        copilotModels !== undefined &&
-        copilotModels !== null &&
-        !copilotModels.some(m => m.id === key.modelId)
-      ) {
-        continue
-      }
-      updated[feature as CopilotFeature] = raw
-    }
-
-    return Object.keys(updated).length === Object.keys(selections).length
-      ? selections
-      : updated
-  }
-
-  /** This shouldn't be called directly. See 'Dispatcher'. */
-  public async _fetchCopilotModels(): Promise<void> {
-    return this.fetchCopilotModelsForCurrentAccounts()
-  }
-
-  /** This shouldn't be called directly. See 'Dispatcher'. */
-  public async _fetchCopilotQuotaSnapshots(): Promise<void> {
-    return this.fetchCopilotQuotaSnapshotsForCurrentAccounts()
-  }
-
-  private async fetchCopilotModelsForCurrentAccounts(): Promise<void> {
-    const accounts = this.getCopilotSettingsAccounts()
-    if (accounts.length === 0) {
-      this.copilotModelsByAccount = new Map()
-      this.emitUpdate()
-      return
-    }
-
-    const copilotModelsByAccount = new Map(this.copilotModelsByAccount)
-
-    for (const account of accounts) {
-      const models = await this.copilotStore.listModels(account)
-      const key = getCopilotAccountCacheKey(account)
-      copilotModelsByAccount.set(key, models === null ? null : [...models])
-    }
-
-    this.copilotModelsByAccount = copilotModelsByAccount
-    if ([...copilotModelsByAccount.values()].some(models => models !== null)) {
-      this.scrubMissingCopilotModelSelections()
-    }
-    this.emitUpdate()
-  }
-
-  private async fetchCopilotQuotaSnapshotsForCurrentAccounts(): Promise<void> {
-    const accounts = this.getCopilotSettingsAccounts()
-    if (accounts.length === 0) {
-      this.copilotQuotaSnapshotsByAccount = new Map()
-      this.emitUpdate()
-      return
-    }
-
-    const copilotQuotaSnapshotsByAccount = new Map(
-      this.copilotQuotaSnapshotsByAccount
-    )
-
-    for (const account of accounts) {
-      copilotQuotaSnapshotsByAccount.set(
-        getCopilotAccountCacheKey(account),
-        await this.copilotStore.getQuotaSnapshots(account)
-      )
-    }
-
-    this.copilotQuotaSnapshotsByAccount = copilotQuotaSnapshotsByAccount
-    this.emitUpdate()
   }
 
   public _setPreferAbsoluteDates(value: boolean) {
@@ -10963,31 +9022,4 @@ function constrain(
     min,
     max: constrainedMax,
   }
-}
-
-/**
- * For a conflicted file, determine which side deleted the file (if any).
- * Returns `'ours'` or `'theirs'` for delete-vs-modify conflicts, or
- * `undefined` for other conflict types.
- */
-function getDeletedSideFromStatus(
-  file: WorkingDirectoryFileChange
-): 'ours' | 'theirs' | undefined {
-  if (!isConflictedFileStatus(file.status)) {
-    return undefined
-  }
-  const { entry } = file.status
-  if (
-    entry.us === GitStatusEntry.Deleted &&
-    entry.them !== GitStatusEntry.Deleted
-  ) {
-    return 'ours'
-  }
-  if (
-    entry.them === GitStatusEntry.Deleted &&
-    entry.us !== GitStatusEntry.Deleted
-  ) {
-    return 'theirs'
-  }
-  return undefined
 }

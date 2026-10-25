@@ -1,16 +1,13 @@
 import assert from 'node:assert'
 import { after, before, describe, it, mock } from 'node:test'
 import type { AppStore } from '../../../src/lib/stores/app-store'
-import type { TestStatsDatabase } from '../../helpers/databases/test-stats-database'
 import { CloningRepository } from '../../../src/models/cloning-repository'
 import { Repository } from '../../../src/models/repository'
 
 describe('AppStore repository indicators', () => {
   let appStore: AppStore
-  let statsDb: TestStatsDatabase | undefined
 
   after(() => {
-    statsDb?.close()
     mock.restoreAll()
   })
 
@@ -23,9 +20,6 @@ describe('AppStore repository indicators', () => {
     })
     const { AppStore } = await import('../../../src/lib/stores/app-store')
     const { AliveStore } = await import('../../../src/lib/stores/alive-store')
-    const { CopilotStore } = await import(
-      '../../../src/lib/stores/copilot-store'
-    )
     const { NotificationsStore } = await import(
       '../../../src/lib/stores/notifications-store'
     )
@@ -36,24 +30,11 @@ describe('AppStore repository indicators', () => {
       '../../helpers/app-store-test-harness'
     )
     const { StatsStore } = await import('../../../src/lib/stats')
-    const { TestStatsDatabase } = await import(
-      '../../helpers/databases/test-stats-database'
-    )
-    const { TestActivityMonitor } = await import(
-      '../../helpers/test-activity-monitor'
-    )
-    const { fakePost } = await import('../../fake-stats-post')
     mock.method(window, 'setTimeout', () => 0)
     mock.method(window, 'addEventListener', () => {})
 
     const stores = createTestStores()
-    statsDb = new TestStatsDatabase()
-    await statsDb.reset()
-    const statsStore = new StatsStore(
-      statsDb,
-      new TestActivityMonitor(),
-      fakePost
-    )
+    const statsStore = new StatsStore()
     const pullRequestCoordinator = new PullRequestCoordinator(
       stores.pullRequestStore,
       stores.repositoriesStore
@@ -75,8 +56,7 @@ describe('AppStore repository indicators', () => {
       pullRequestCoordinator,
       stores.repositoryStateCache,
       stores.apiRepositoriesStore,
-      notificationsStore,
-      new CopilotStore(stores.accountsStore)
+      notificationsStore
     )
   })
 

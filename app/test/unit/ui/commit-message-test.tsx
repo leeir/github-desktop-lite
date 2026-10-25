@@ -1,5 +1,5 @@
 import assert from 'node:assert'
-import { afterEach, describe, it } from 'node:test'
+import { describe, it } from 'node:test'
 import * as React from 'react'
 
 import { Account } from '../../../src/models/account'
@@ -15,18 +15,15 @@ import {
 } from '../../../src/models/status'
 import { CommitMessage } from '../../../src/ui/changes/commit-message'
 
-const PreviewFeaturesEnv = 'GITHUB_DESKTOP_PREVIEW_FEATURES'
-const previousPreviewFeatures = process.env[PreviewFeaturesEnv]
-
 type CommitMessageProps = React.ComponentProps<typeof CommitMessage>
-type CopilotButtonProps = {
+type AIButtonProps = {
   readonly ariaLabel?: string
   readonly disabled?: boolean
 }
 
 type CommitMessageTestInstance = {
-  readonly renderCopilotButton: () => React.ReactElement | null
-  readonly onCopilotButtonClick: (
+  readonly renderAIButton: () => React.ReactElement | null
+  readonly onAIButtonClick: (
     event: Pick<React.MouseEvent<HTMLButtonElement>, 'preventDefault'>
   ) => Promise<void>
 }
@@ -40,10 +37,7 @@ function createAccount() {
     '',
     1,
     'Mona Lisa',
-    'free',
-    'https://copilot-proxy.githubusercontent.com',
-    true,
-    ['desktop_copilot_generate_commit_message']
+    'free'
   )
 }
 
@@ -106,7 +100,6 @@ function createProps(
     showCoAuthoredBy: false,
     showInputLabels: false,
     coAuthors: [],
-    shouldNudge: false,
     commitSpellcheckEnabled: false,
     showCommitLengthWarning: false,
     mostRecentLocalCommit: null,
@@ -136,74 +129,49 @@ function toTestInstance(component: CommitMessage): CommitMessageTestInstance {
   return component as unknown as CommitMessageTestInstance
 }
 
-function isElementWithCopilotButtonProps(
+function isElementWithAIButtonProps(
   node: React.ReactNode
-): node is React.ReactElement<
-  CopilotButtonProps & { readonly className?: string }
-> {
-  return React.isValidElement(node) && node.props.className === 'copilot-button'
+): node is React.ReactElement<AIButtonProps & { readonly className?: string }> {
+  return React.isValidElement(node) && node.props.className === 'ai-button'
 }
 
-function getCopilotButtonProps(
-  component: CommitMessageTestInstance
-): CopilotButtonProps {
-  const button = component.renderCopilotButton()
+function getAIButtonProps(component: CommitMessageTestInstance): AIButtonProps {
+  const button = component.renderAIButton()
   if (button === null) {
-    throw new Error('Expected Copilot button to render')
+    throw new Error('Expected AI button to render')
   }
 
   const buttonElement = React.Children.toArray(button.props.children).find(
-    isElementWithCopilotButtonProps
+    isElementWithAIButtonProps
   )
   if (buttonElement === undefined) {
-    throw new Error('Expected Copilot button element to render')
+    throw new Error('Expected AI button element to render')
   }
 
   return buttonElement.props
 }
 
-async function clickCopilotButton(component: CommitMessageTestInstance) {
-  await component.onCopilotButtonClick({
+async function clickAIButton(component: CommitMessageTestInstance) {
+  await component.onAIButtonClick({
     preventDefault: () => {},
   })
 }
 
-afterEach(() => {
-  if (previousPreviewFeatures === undefined) {
-    delete process.env[PreviewFeaturesEnv]
-  } else {
-    process.env[PreviewFeaturesEnv] = previousPreviewFeatures
-  }
-})
-
 describe('CommitMessage', () => {
-  it('does not allow cancelling commit message generation when the Copilot SDK is disabled', async () => {
-    delete process.env[PreviewFeaturesEnv]
-
-    let cancelCount = 0
+  it('does not allow cancelling commit message generation without a cancel handler', async () => {
     const component = toTestInstance(
       new CommitMessage(
-        createProps({
-          onCancelGenerateCommitMessage: () => {
-            cancelCount++
-          },
-        })
+        createProps({ onCancelGenerateCommitMessage: undefined })
       )
     )
 
-    const buttonProps = getCopilotButtonProps(component)
+    const buttonProps = getAIButtonProps(component)
 
     assert.equal(buttonProps.ariaLabel, 'Generating commit details…')
     assert.equal(buttonProps.disabled, true)
-
-    await clickCopilotButton(component)
-
-    assert.equal(cancelCount, 0)
   })
 
-  it('allows cancelling commit message generation when the Copilot SDK is enabled', async () => {
-    process.env[PreviewFeaturesEnv] = '1'
-
+  it('allows cancelling commit message generation', async () => {
     let cancelCount = 0
     const component = toTestInstance(
       new CommitMessage(
@@ -215,12 +183,12 @@ describe('CommitMessage', () => {
       )
     )
 
-    const buttonProps = getCopilotButtonProps(component)
+    const buttonProps = getAIButtonProps(component)
 
     assert.equal(buttonProps.ariaLabel, 'Cancel generating commit details')
     assert.equal(buttonProps.disabled, false)
 
-    await clickCopilotButton(component)
+    await clickAIButton(component)
 
     assert.equal(cancelCount, 1)
   })
