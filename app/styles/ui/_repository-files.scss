@@ -1,0 +1,416 @@
+#repository .workspace-modes {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 7px;
+  background: var(--lite-shell);
+  .button-component {
+    border: 0;
+    background: transparent;
+    color: var(--lite-muted);
+    min-width: 65px;
+    height: 28px;
+    padding: 0 14px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+  .button-component[aria-pressed='true'] {
+    background: var(--lite-raised);
+    color: var(--text-color);
+  }
+}
+.repository-files {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  &[hidden] {
+    display: none;
+  }
+  > .resizable-component {
+    flex-shrink: 0;
+  }
+  .repository-files-sidebar {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--lite-shell);
+    border-right: 1px solid var(--lite-border);
+  }
+  .files-directory-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    height: 46px;
+    flex-shrink: 0;
+    > span {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    button {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      box-shadow: none;
+      color: var(--lite-muted);
+      transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+      &:hover:not(:disabled):not([aria-disabled='true']) {
+        background: var(--lite-control-hover);
+        color: var(--text-color);
+      }
+      &:disabled,
+      &[aria-disabled='true'] {
+        opacity: 0.32;
+        cursor: default;
+        &:hover {
+          background: transparent;
+          color: var(--lite-muted);
+        }
+      }
+    }
+  }
+  .files-breadcrumbs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 0 10px 9px;
+    max-height: 96px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    color: var(--lite-muted);
+    .button-component {
+      font-size: 11px;
+      height: 24px;
+      padding: 0 4px;
+      border: 0;
+      box-shadow: none;
+      background: transparent;
+      color: var(--lite-muted);
+      max-width: 180px;
+    }
+  }
+  .files-directory-list {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .files-directory-list > .list {
+    flex: 1;
+  }
+  .repository-file-entry {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    gap: 9px;
+    padding: 0 14px;
+    font-size: 12px;
+    > span {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .octicon {
+      color: var(--lite-muted);
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+    }
+    .octicon:last-child {
+      width: 11px;
+    }
+    small {
+      color: var(--lite-muted);
+      font-size: 10px;
+    }
+  }
+  .files-directory-footer {
+    flex-shrink: 0;
+    color: var(--lite-muted);
+    padding: 12px 14px;
+    border-top: 1px solid var(--lite-border);
+    font-size: 10px;
+  }
+  .files-list-message {
+    padding: 8px 14px;
+    color: var(--lite-muted);
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+  }
+  .repository-file-preview {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    background: var(--lite-canvas);
+  }
+  .file-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 46px;
+    padding: 7px 16px;
+    border-bottom: 1px solid var(--lite-border);
+    flex-shrink: 0;
+    .file-preview-path {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    small {
+      color: var(--lite-muted);
+      white-space: nowrap;
+    }
+    button {
+      font-size: 11px;
+      height: 27px;
+      flex-shrink: 0;
+    }
+  }
+  .files-empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 36px;
+    color: var(--lite-muted);
+    text-align: center;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+    > .octicon {
+      width: 30px;
+      height: 30px;
+      margin-bottom: 12px;
+      opacity: 0.65;
+    }
+    h2 {
+      font-size: 19px;
+      font-weight: 500;
+      color: var(--text-color);
+      margin: 6px 0;
+    }
+    p {
+      font-size: 12px;
+      margin: 0;
+    }
+  }
+  .files-notice {
+    padding: 9px 16px;
+    color: var(--lite-muted);
+    font-size: 11px;
+    border-bottom: 1px solid var(--lite-border);
+    flex-shrink: 0;
+  }
+  .repository-code {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    font-family: var(--font-family-monospace);
+    font-size: 12px;
+    user-select: text;
+  }
+  .repository-code-line {
+    display: flex;
+    align-items: baseline;
+    min-width: 100%;
+    width: max-content !important;
+    white-space: pre;
+    line-height: 22px;
+    tab-size: 4;
+    .line-number {
+      width: 60px;
+      flex-shrink: 0;
+      padding-right: 16px;
+      text-align: right;
+      color: var(--lite-muted);
+      opacity: 0.6;
+      user-select: none;
+    }
+    code {
+      font: inherit;
+      padding-right: 24px;
+
+      // Global chrome styles disable selection on every non-input element.
+      // Override each token too, so highlighted code supports native dragging.
+      &,
+      * {
+        user-select: text;
+        cursor: text;
+      }
+    }
+  }
+}
+
+.repository-files {
+  .filename-search {
+    flex-shrink: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    > .text-box-component {
+      flex: 0 0 auto;
+      margin: 0 10px 10px;
+      input {
+        font-size: 12px;
+        height: 30px;
+      }
+    }
+    &.is-searching {
+      flex: 1;
+    }
+  }
+  .filename-search-scope {
+    font-size: 10px;
+    color: var(--lite-muted);
+    padding: 0 14px 10px;
+  }
+  .filename-match > span {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    > span,
+    > small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    > small {
+      font-size: 10px;
+    }
+  }
+  .file-code-search {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    gap: 6px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--lite-border);
+    background: var(--lite-shell);
+    .text-box-component {
+      flex: 1;
+      min-width: 100px;
+      margin: 0;
+      input {
+        font-size: 12px;
+        height: 28px;
+      }
+    }
+    .file-match-count {
+      color: var(--lite-muted);
+      font-size: 11px;
+      min-width: 66px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .button-component {
+      height: 26px;
+      width: 26px;
+      min-width: 26px;
+      padding: 4px;
+      border: 0;
+      box-shadow: none;
+      background: transparent;
+      color: var(--lite-muted);
+      &:hover:not(:disabled) {
+        background: var(--lite-raised);
+        color: var(--text-color);
+      }
+    }
+    .file-search-limit {
+      width: 100%;
+      color: var(--lite-muted);
+      font-size: 10px;
+    }
+  }
+  .repository-code .cm-file-search-match {
+    background: rgba(187, 157, 70, 0.24);
+    border-radius: 2px;
+  }
+  .repository-code .cm-file-search-current {
+    background: rgba(209, 169, 55, 0.42);
+    box-shadow: inset 0 -1px rgba(229, 191, 82, 0.9);
+    border-radius: 2px;
+  }
+}
+
+.repository-files {
+  .repository-tree {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    margin: 0 6px 6px;
+    &:focus {
+      outline: none;
+    }
+    &:focus-visible .repository-tree-row[aria-selected='true'] {
+      outline: 1px solid var(--lite-accent);
+      outline-offset: -1px;
+    }
+  }
+  .repository-tree-row {
+    border-radius: 5px;
+    cursor: default;
+    > div {
+      display: flex;
+      align-items: center;
+      height: 100%;
+      gap: 7px;
+      padding-right: 10px;
+    }
+    .octicon {
+      width: 14px;
+      height: 14px;
+      color: var(--lite-muted);
+      flex-shrink: 0;
+    }
+    .tree-disclosure {
+      width: 11px;
+      flex-shrink: 0;
+      display: flex;
+      .octicon {
+        width: 11px;
+        height: 11px;
+      }
+    }
+    .tree-entry-name {
+      font-size: 12px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    small {
+      color: var(--lite-muted);
+      font-size: 10px;
+    }
+    &[aria-selected='true'] {
+      background: var(--box-selected-background-color);
+    }
+    &:hover:not([aria-selected='true']) {
+      background: var(--lite-raised);
+    }
+    &.current-file .tree-entry-name {
+      color: var(--lite-accent);
+    }
+  }
+}

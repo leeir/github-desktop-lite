@@ -1,0 +1,29 @@
+@mixin octicon-status {
+  .status {
+    &-new {
+      color: var(--color-new);
+    }
+    &-copied {
+      color: var(--color-new);
+    }
+    &-modified {
+      color: var(--color-modified);
+    }
+    &-renamed {
+      color: var(--color-renamed);
+    }
+    &-deleted {
+      color: var(--color-deleted);
+    }
+    &-conflicted {
+      color: var(--color-conflicted);
+    }
+    &-resolved {
+      color: var(--color-new);
+    }
+  }
+
+  .line-endings {
+    color: var(--color-conflicted);
+  }
+}

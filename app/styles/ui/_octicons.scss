@@ -1,0 +1,20 @@
+svg.octicon {
+  flex-shrink: 0;
+}
+
+svg.lucide {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+svg.icon-filled {
+  fill: currentColor;
+}
+
+svg.brand-icon {
+  fill: currentColor;
+  stroke: none;
+}

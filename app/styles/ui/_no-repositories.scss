@@ -1,0 +1,242 @@
+// For all views other than the dedicated blank slate
+// view. Yes, this is confusing.
+.blankslate-image {
+  width: 50%;
+  min-width: 400px;
+  max-width: 800px;
+}
+
+// In the foldout we want the image to fill the
+// full width of the container (minus padding).
+.foldout .blankslate-image {
+  width: 100%;
+  min-width: auto;
+}
+
+#no-repositories {
+  --start-background: #fafafa;
+  --start-surface: #f1f1f3;
+  --start-border: #e3e3e7;
+  --start-text: #222226;
+  --start-muted: #6b6b75;
+  --start-accent: #635fbb;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: auto;
+  background: var(--start-background);
+  color: var(--start-text);
+  padding: 0 40px;
+
+  .local-start-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 0;
+    flex-shrink: 0;
+  }
+
+  .local-start-brand {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    span {
+      color: var(--start-muted);
+      font-weight: 400;
+    }
+  }
+
+  .local-start-settings {
+    background: transparent;
+    color: var(--start-muted);
+    border: 1px solid var(--start-border);
+    box-shadow: none;
+    border-radius: 7px;
+    height: 32px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    .octicon {
+      width: 14px;
+      height: 14px;
+    }
+    &:hover {
+      background: var(--start-surface);
+      color: var(--start-text);
+    }
+  }
+
+  .local-start-content {
+    flex: 1 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 35px 0 65px;
+    max-width: 510px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .local-start-symbol {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 80px;
+    height: 80px;
+    background: var(--start-surface);
+    border: 1px solid var(--start-border);
+    border-radius: 22px;
+    margin-bottom: 29px;
+    > .octicon {
+      width: 38px;
+      height: 38px;
+      color: var(--start-muted);
+    }
+    > span {
+      display: grid;
+      place-items: center;
+      position: absolute;
+      right: -10px;
+      bottom: -5px;
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--start-border);
+      border-radius: 10px;
+      background: var(--start-background);
+      color: var(--start-accent);
+      .octicon {
+        width: 16px;
+        height: 16px;
+      }
+    }
+  }
+
+  .local-start-eyebrow {
+    font-size: 12px;
+    color: var(--start-muted);
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.8px;
+    margin: 0;
+    line-height: 1.25;
+  }
+  .local-start-description {
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--start-muted);
+    margin: 16px 0 27px;
+  }
+  .local-start-open {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 40px;
+    height: auto;
+    padding: 10px 20px;
+    background: var(--start-accent);
+    color: #fff;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    box-shadow: none;
+    font-size: 13px;
+    font-weight: 500;
+    .octicon {
+      width: 16px;
+      height: 16px;
+    }
+    &:hover {
+      filter: brightness(1.1);
+    }
+    &[aria-disabled='true'] {
+      opacity: 0.6;
+    }
+  }
+  .button-component:focus-visible {
+    outline: 2px solid var(--start-accent);
+    outline-offset: 4px;
+  }
+  .local-start-status {
+    color: var(--start-muted);
+    font-size: 11px;
+    line-height: 1.7;
+    margin-top: 17px;
+  }
+  .local-start-error {
+    display: flex;
+    text-align: left;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 22px;
+    padding: 14px 16px;
+    border: 1px solid var(--start-border);
+    border-radius: 8px;
+    background: var(--start-surface);
+    font-size: 12px;
+    line-height: 1.7;
+    .octicon {
+      flex-shrink: 0;
+      color: var(--color-deleted);
+      margin-top: 3px;
+      width: 16px;
+      height: 16px;
+    }
+  }
+  .local-start-footer {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    border-top: 1px solid var(--start-border);
+    padding: 19px 0 23px;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--start-muted);
+    flex-shrink: 0;
+  }
+}
+
+body.theme-dark #no-repositories {
+  --start-background: #111113;
+  --start-surface: #19191c;
+  --start-border: #2b2b30;
+  --start-text: #ededf0;
+  --start-muted: #96969f;
+  --start-accent: #716bc4;
+}
+
+body:has(#no-repositories) #desktop-app-title-bar {
+  background: #fafafa;
+  border-bottom: 0;
+}
+body.theme-dark:has(#no-repositories) #desktop-app-title-bar {
+  background: #111113;
+}
+
+@media (max-height: 560px), (max-width: 600px) {
+  #no-repositories {
+    padding: 0 24px;
+    .local-start-content {
+      padding: 24px 0 32px;
+    }
+    .local-start-symbol {
+      width: 58px;
+      height: 58px;
+      border-radius: 16px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 24px;
+    }
+    .local-start-footer {
+      justify-content: center;
+      text-align: center;
+    }
+  }
+}
